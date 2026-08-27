@@ -15,10 +15,83 @@ import {
   RefreshCw,
   ShieldAlert,
   BookOpen,
-  Phone
+  Phone,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  FileCheck2,
+  AlertTriangle,
+  HeartPulse
 } from 'lucide-react';
 
 const API_BASE = 'http://localhost:5000/api';
+
+const TREND_RANGES = [
+  { key: 'today', label: 'Today' },
+  { key: '7d', label: '7 Days' },
+  { key: '30d', label: '30 Days' },
+  { key: '90d', label: '90 Days' }
+];
+
+// "2 min ago" / "3 hours ago" style relative time for the activity feed.
+function timeAgo(isoString) {
+  const diffMs = Date.now() - new Date(isoString).getTime();
+  if (isNaN(diffMs)) return '';
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function TrendIndicator({ trend }) {
+  if (!trend) return null;
+  const { direction, changePercent } = trend;
+  if (direction === 'up') {
+    return <span className="trend-indicator up"><TrendingUp size={14} /> {changePercent}%</span>;
+  }
+  if (direction === 'down') {
+    return <span className="trend-indicator down"><TrendingDown size={14} /> {Math.abs(changePercent)}%</span>;
+  }
+  return <span className="trend-indicator flat"><Minus size={14} /> Flat</span>;
+}
+
+// Minimal dependency-free SVG bar chart for the usage trend panel.
+function TrendChart({ series }) {
+  if (!series || series.length === 0) {
+    return <div className="trend-chart-empty">No activity data for this range.</div>;
+  }
+
+  const width = 100;
+  const height = 40;
+  const maxVal = Math.max(...series.map(p => p.completed), 1);
+  const barWidth = width / series.length;
+
+  return (
+    <svg className="trend-chart" viewBox={`0 0 ${width} ${height + 8}`} preserveAspectRatio="none">
+      {series.map((point, i) => {
+        const barHeight = (point.completed / maxVal) * height;
+        return (
+          <g key={point.date}>
+            <rect
+              x={i * barWidth + barWidth * 0.15}
+              y={height - barHeight}
+              width={barWidth * 0.7}
+              height={Math.max(barHeight, point.completed > 0 ? 1 : 0)}
+              rx="0.6"
+              fill="var(--accent-primary)"
+              opacity={point.completed > 0 ? 0.9 : 0.15}
+            >
+              <title>{`${point.date}: ${point.completed} completed`}</title>
+            </rect>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
 
 function App() {
   // Authentication State
@@ -35,6 +108,15 @@ function App() {
   const [dbStatuses, setDbStatuses] = useState(null);
   const [overviewData, setOverviewData] = useState([]);
   const [summaryData, setSummaryData] = useState(null);
+
+  // Phase 1: Usage trend, live activity, alerts, system health, reports
+  const [trendRange, setTrendRange] = useState('7d');
+  const [trendSeries, setTrendSeries] = useState([]);
+  const [trendLoading, setTrendLoading] = useState(false);
+  const [activityData, setActivityData] = useState([]);
+  const [alertsData, setAlertsData] = useState([]);
+  const [healthData, setHealthData] = useState(null);
+  const [reportsSummary, setReportsSummary] = useState(null);
 
   // Assessment Details State
   const [candidates, setCandidates] = useState([]);
@@ -165,6 +247,18 @@ function App() {
       const summaryRes = await authFetch(`${API_BASE}/overview/summary`);
       const summaryData = await summaryRes.json();
       setSummaryData(summaryData);
+
+      // Phase 1: health, alerts, live activity, report monitoring
+      const [healthRes, alertsRes, activityRes, reportsRes] = await Promise.all([
+        authFetch(`${API_BASE}/health`),
+        authFetch(`${API_BASE}/alerts`),
+        authFetch(`${API_BASE}/activity?limit=15`),
+        authFetch(`${API_BASE}/reports/summary`)
+      ]);
+      setHealthData(await healthRes.json());
+      setAlertsData((await alertsRes.json()).alerts || []);
+      setActivityData((await activityRes.json()).events || []);
+      setReportsSummary(await reportsRes.json());
     } catch (err) {
       console.error('Error connecting to backend:', err);
       if (!err.message.includes('Session expired')) {
@@ -180,6 +274,24 @@ function App() {
       loadInitialData();
     }
   }, [token]);
+
+  // Fetch usage trend data whenever the token is ready or the selected range changes.
+  useEffect(() => {
+    if (!token) return;
+    const fetchTrend = async () => {
+      setTrendLoading(true);
+      try {
+        const res = await authFetch(`${API_BASE}/overview/trend?range=${trendRange}`);
+        const data = await res.json();
+        setTrendSeries(data.series || []);
+      } catch (err) {
+        console.error('Error fetching trend:', err);
+      } finally {
+        setTrendLoading(false);
+      }
+    };
+    fetchTrend();
+  }, [token, trendRange]);
 
   // 2. Fetch candidates when switching assessment views
   useEffect(() => {
@@ -550,6 +662,29 @@ function App() {
                   </div>
                 )}
 
+                {/* Usage Activity Trend */}
+                <div className="panel">
+                  <div className="panel-header">
+                    <h2>Assessment Activity Trend</h2>
+                    <div className="range-tabs">
+                      {TREND_RANGES.map(r => (
+                        <button
+                          key={r.key}
+                          className={`range-tab ${trendRange === r.key ? 'active' : ''}`}
+                          onClick={() => setTrendRange(r.key)}
+                        >
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {trendLoading ? (
+                    <div className="trend-chart-empty">Loading trend...</div>
+                  ) : (
+                    <TrendChart series={trendSeries} />
+                  )}
+                </div>
+
                 {/* Per-Tool Stats Cards */}
                 <div className="stats-grid">
                   {overviewData.map((item, idx) => (
@@ -584,6 +719,7 @@ function App() {
                           <th>Avg / Median Score</th>
                           <th>Score Distribution</th>
                           <th>Last Activity</th>
+                          <th>Trend</th>
                           <th>Status Health</th>
                           <th>Action</th>
                         </tr>
@@ -613,6 +749,9 @@ function App() {
                               {item.lastActivity ? new Date(item.lastActivity).toLocaleDateString() : 'N/A'}
                             </td>
                             <td>
+                              <TrendIndicator trend={item.trend} />
+                            </td>
+                            <td>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                                 <span className={`status-dot ${item.mode === 'live' ? 'online' : 'offline'}`}></span>
                                 <span style={{ fontSize: '0.85rem' }}>{item.mode === 'live' ? 'Online/Live' : 'Using Fallback Mock'}</span>
@@ -626,6 +765,90 @@ function App() {
                       </tbody>
                     </table>
                   </div>
+                </div>
+
+                {/* Live Activity + Attention Required */}
+                <div className="split-grid">
+                  <div className="panel">
+                    <div className="panel-header">
+                      <h2>Live Activity</h2>
+                    </div>
+                    {activityData.length === 0 ? (
+                      <div className="trend-chart-empty">No recent activity.</div>
+                    ) : (
+                      <div className="activity-feed">
+                        {activityData.map((event, idx) => (
+                          <div className="activity-item" key={idx}>
+                            <span className={`activity-dot ${event.type}`}></span>
+                            <span className="activity-text">
+                              {event.type === 'assessment_completed' && (
+                                <><strong>{event.candidateName}</strong> completed {event.tool}</>
+                              )}
+                              {event.type === 'report_generated' && (
+                                <>Report generated for <strong>{event.candidateName}</strong> ({event.tool})</>
+                              )}
+                              {event.type === 'report_failed' && (
+                                <>Report generation failed for <strong>{event.candidateName}</strong> ({event.tool})</>
+                              )}
+                            </span>
+                            <span className="activity-time">{timeAgo(event.timestamp)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="panel">
+                    <div className="panel-header">
+                      <h2><AlertTriangle size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />Attention Required</h2>
+                    </div>
+                    <div className="alerts-list">
+                      {alertsData.map((alert, idx) => (
+                        <div className={`alert-item ${alert.severity}`} key={idx}>
+                          <div className="alert-item-body">
+                            {alert.tool && <strong>{alert.tool}</strong>}
+                            <span>{alert.message}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* System / Health Monitoring */}
+                <div className="panel">
+                  <div className="panel-header">
+                    <h2><HeartPulse size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />System Health</h2>
+                    {reportsSummary && (
+                      <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        <span><FileCheck2 size={13} style={{ verticalAlign: '-2px' }} /> {reportsSummary.totalGenerated} reports generated</span>
+                        <span>{reportsSummary.totalFailed} failed</span>
+                        <span>{reportsSummary.successRate}% success rate</span>
+                      </div>
+                    )}
+                  </div>
+                  {healthData && (
+                    <div className="health-grid">
+                      {Object.keys(healthData).map(dbId => {
+                        const h = healthData[dbId];
+                        return (
+                          <div className="health-card" key={dbId}>
+                            <div className="health-card-header">
+                              <span>{h.name}</span>
+                              <span className={`health-status-pill ${h.status}`}>{h.status}</span>
+                            </div>
+                            <div className="health-card-meta">
+                              {h.calls > 0 ? (
+                                <>{h.avgLatencyMs}ms avg · {h.errorRate}% error rate ({h.calls} calls)</>
+                              ) : (
+                                <>No live query attempts yet</>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </>
             )}

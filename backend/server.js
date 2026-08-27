@@ -81,6 +81,66 @@ function writeUsers(users) {
   }
 }
 
+// -------------------------------------------------------------
+// Report generation log (Phase 1: Report Monitoring)
+// Every PDF request (success or failure) gets appended here, since the
+// Supabase projects don't track this themselves — it's the admin
+// panel's own record of what it has generated.
+// -------------------------------------------------------------
+const REPORTS_FILE = path.join(__dirname, 'data', 'reports.json');
+if (!fs.existsSync(REPORTS_FILE)) {
+  fs.writeFileSync(REPORTS_FILE, '[]', 'utf8');
+}
+
+function readReports() {
+  try {
+    return JSON.parse(fs.readFileSync(REPORTS_FILE, 'utf8'));
+  } catch (err) {
+    console.error('Error reading reports file:', err);
+    return [];
+  }
+}
+
+function logReportEvent(entry) {
+  try {
+    const reports = readReports();
+    reports.push({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: new Date().toISOString(),
+      ...entry
+    });
+    // Keep the log bounded so it doesn't grow forever.
+    const trimmed = reports.slice(-2000);
+    fs.writeFileSync(REPORTS_FILE, JSON.stringify(trimmed, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Error writing reports file:', err);
+  }
+}
+
+// -------------------------------------------------------------
+// Adapter health tracking (Phase 1: System / Health Monitoring)
+// In-memory counters reset on restart — good enough for "is a tool
+// unhealthy right now," which is what the health panel needs.
+// -------------------------------------------------------------
+const healthStats = {};
+for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
+  healthStats[dbId] = { calls: 0, errors: 0, totalLatencyMs: 0, lastError: null, lastErrorAt: null, lastSuccessAt: null };
+}
+
+function recordHealth(dbId, { ok, latencyMs, error }) {
+  const stat = healthStats[dbId];
+  if (!stat) return;
+  stat.calls++;
+  stat.totalLatencyMs += latencyMs;
+  if (ok) {
+    stat.lastSuccessAt = new Date().toISOString();
+  } else {
+    stat.errors++;
+    stat.lastError = error;
+    stat.lastErrorAt = new Date().toISOString();
+  }
+}
+
 // Authentication Middleware
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -257,8 +317,34 @@ function computeToolStats(candidates) {
   };
 }
 
+// Compare candidate volume in the last 7 days vs the 7 days before that,
+// per tool. Used for the ↑/↓ trend indicator on the tool-wise table.
+function computeTrend(candidates) {
+  const day = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const last7Start = now - 7 * day;
+  const prior7Start = now - 14 * day;
+
+  let last7 = 0;
+  let prior7 = 0;
+  for (const c of candidates) {
+    if (!c.testDate) continue;
+    const t = new Date(c.testDate).getTime();
+    if (isNaN(t)) continue;
+    if (t >= last7Start && t <= now) last7++;
+    else if (t >= prior7Start && t < last7Start) prior7++;
+  }
+
+  if (prior7 === 0) {
+    return { direction: last7 > 0 ? 'up' : 'flat', changePercent: last7 > 0 ? 100 : 0 };
+  }
+  const changePercent = Math.round(((last7 - prior7) / prior7) * 100);
+  return { direction: changePercent > 0 ? 'up' : changePercent < 0 ? 'down' : 'flat', changePercent };
+}
+
 // Fetch (live-or-mock) candidates for one adapter, same fallback logic
-// used everywhere else in this file.
+// used everywhere else in this file. Live attempts are timed and
+// recorded into healthStats regardless of outcome.
 async function fetchCandidatesForTool(dbId) {
   const adapter = ADAPTERS[dbId];
   const client = getSupabaseClient(dbId);
@@ -266,12 +352,15 @@ async function fetchCandidatesForTool(dbId) {
   let candidates = [];
 
   if (client) {
+    const start = Date.now();
     try {
       candidates = await adapter.getCandidates(client);
+      recordHealth(dbId, { ok: true, latencyMs: Date.now() - start });
     } catch (err) {
       console.warn(`Query failed for ${dbId}, falling back to mock data. Error:`, err.message);
       candidates = adapter.getMockCandidates();
       isMock = true;
+      recordHealth(dbId, { ok: false, latencyMs: Date.now() - start, error: err.message });
     }
   } else {
     candidates = adapter.getMockCandidates();
@@ -292,13 +381,15 @@ app.get('/api/overview', async (req, res) => {
     for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
       const { adapter, candidates, isMock } = await fetchCandidatesForTool(dbId);
       const stats = computeToolStats(candidates);
+      const trend = computeTrend(candidates);
 
       overview.push({
         id: dbId,
         name: adapter.metadata.name,
         description: adapter.metadata.description,
         mode: isMock ? 'mock' : 'live',
-        ...stats
+        ...stats,
+        trend
       });
     }
 
@@ -455,6 +546,7 @@ app.get('/api/assessments/:dbId/candidates/:candidateId/pdf', async (req, res) =
           res.setHeader('Content-Type', 'application/pdf');
           res.setHeader('Content-Disposition', `attachment; filename=${personalInfo.name.replace(/\s+/g, '_')}_Result.pdf`);
           res.send(buffer);
+          logReportEvent({ dbId, toolName: adapter.metadata.name, candidateId, candidateName: personalInfo.name, status: 'success', source: 'pregenerated' });
           return;
         } else {
           console.warn(`Failed to download PDF from URL: ${personalInfo.pdfUrl}, status: ${pdfRes.status}`);
@@ -518,6 +610,7 @@ app.get('/api/assessments/:dbId/candidates/:candidateId/pdf', async (req, res) =
       // Embed the image centered or full-width (width of letter page is 612 pt)
       doc.image(dashboardImageBuffer, 0, 0, { width: 612 });
       doc.end();
+      logReportEvent({ dbId, toolName: adapter.metadata.name, candidateId, candidateName: personalInfo.name, status: 'success', source: 'dashboard-image' });
       return;
     }
 
@@ -628,8 +721,10 @@ app.get('/api/assessments/:dbId/candidates/:candidateId/pdf', async (req, res) =
     }
 
     doc.end();
+    logReportEvent({ dbId, toolName: adapter.metadata.name, candidateId, candidateName: personalInfo.name, status: 'success', source: 'generated' });
   } catch (error) {
     console.error(error);
+    logReportEvent({ dbId, toolName: adapter.metadata.name, candidateId, candidateName: details?.personalInfo?.name || null, status: 'failed', error: error.message });
     res.status(500).json({ error: error.message });
   }
 });
@@ -687,6 +782,201 @@ app.get('/api/assessments/:dbId/users', async (req, res) => {
   try {
     const result = await adapter.getUserBreakdown(client);
     res.json({ supported: true, mode: 'live', ...result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// -------------------------------------------------------------
+// Phase 1 additions: System health, report monitoring, usage trend,
+// alerts and live activity — all built from data the admin panel
+// already has (candidates + its own report log), no new source-schema
+// columns required.
+// -------------------------------------------------------------
+
+// System / Health Monitoring (doc section 14) — per-adapter query
+// health since the backend started.
+app.get('/api/health', (req, res) => {
+  const health = {};
+  for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
+    const stat = healthStats[dbId];
+    const cfg = dbConfig[dbId];
+    const hasConfig = !!(cfg && cfg.url && cfg.key);
+    const errorRate = stat.calls > 0 ? Math.round((stat.errors / stat.calls) * 100) : 0;
+    const avgLatencyMs = stat.calls > 0 ? Math.round(stat.totalLatencyMs / stat.calls) : null;
+
+    let status = 'unknown';
+    if (!hasConfig) status = 'mock';
+    else if (errorRate > 20) status = 'critical';
+    else if (errorRate > 0) status = 'warning';
+    else if (stat.calls > 0) status = 'healthy';
+
+    health[dbId] = {
+      name: ADAPTERS[dbId].metadata.name,
+      status,
+      calls: stat.calls,
+      errors: stat.errors,
+      errorRate,
+      avgLatencyMs,
+      lastError: stat.lastError,
+      lastErrorAt: stat.lastErrorAt,
+      lastSuccessAt: stat.lastSuccessAt
+    };
+  }
+  res.json(health);
+});
+
+// Report Monitoring (doc section 13) — generated/failed counts and a
+// recent log, sourced from this backend's own PDF request history.
+app.get('/api/reports/summary', (req, res) => {
+  const reports = readReports();
+  const byTool = {};
+  let totalGenerated = 0;
+  let totalFailed = 0;
+
+  for (const r of reports) {
+    if (!byTool[r.dbId]) byTool[r.dbId] = { generated: 0, failed: 0 };
+    if (r.status === 'success') {
+      totalGenerated++;
+      byTool[r.dbId].generated++;
+    } else {
+      totalFailed++;
+      byTool[r.dbId].failed++;
+    }
+  }
+
+  const total = totalGenerated + totalFailed;
+  res.json({
+    totalGenerated,
+    totalFailed,
+    successRate: total > 0 ? Math.round((totalGenerated / total) * 100) : 100,
+    byTool,
+    recent: reports.slice(-20).reverse()
+  });
+});
+
+// Usage trend (doc section 3) — completed-assessment counts bucketed
+// by day. Only "Completed" is real; Started/Abandoned need session
+// status data this dashboard doesn't have yet (see schema audit).
+const RANGE_DAYS = { today: 1, '7d': 7, '30d': 30, '90d': 90 };
+
+app.get('/api/overview/trend', async (req, res) => {
+  try {
+    const range = RANGE_DAYS[req.query.range] ? req.query.range : '7d';
+    const days = RANGE_DAYS[range];
+    const dbIdFilter = req.query.dbId;
+    const dbIds = dbIdFilter && ADAPTERS[dbIdFilter] ? [dbIdFilter] : ['db1', 'db2', 'db3', 'db4', 'db5'];
+
+    const buckets = {};
+    const dayKeys = [];
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setUTCDate(d.getUTCDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      dayKeys.push(key);
+      buckets[key] = 0;
+    }
+
+    for (const dbId of dbIds) {
+      const { candidates } = await fetchCandidatesForTool(dbId);
+      for (const c of candidates) {
+        if (!c.testDate) continue;
+        const key = new Date(c.testDate).toISOString().slice(0, 10);
+        if (key in buckets) buckets[key]++;
+      }
+    }
+
+    res.json({ range, series: dayKeys.map(key => ({ date: key, completed: buckets[key] })) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Alerts / Attention Required (doc section 15) — derived signals from
+// data already on hand: volume drop, low-score concentration, PDF
+// failure rate, and elevated query error rate. Not the full doc list
+// (that needs status/history data this dashboard doesn't have), but
+// real anomalies rather than nothing.
+app.get('/api/alerts', async (req, res) => {
+  try {
+    const alerts = [];
+    const reports = readReports();
+
+    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
+      const { adapter, candidates, isMock } = await fetchCandidatesForTool(dbId);
+      const stats = computeToolStats(candidates);
+      const trend = computeTrend(candidates);
+      const name = adapter.metadata.name;
+
+      if (isMock) {
+        alerts.push({ tool: name, dbId, severity: 'info', message: 'Running on mock data — live Supabase connection not configured' });
+      } else {
+        if (trend.direction === 'down' && Math.abs(trend.changePercent) >= 20) {
+          alerts.push({ tool: name, dbId, severity: 'warning', message: `Completed assessments dropped ${Math.abs(trend.changePercent)}% vs the prior 7 days` });
+        }
+        if (stats.totalTestTakers > 0 && stats.scoreDistribution.low >= 40) {
+          alerts.push({ tool: name, dbId, severity: 'warning', message: `${stats.scoreDistribution.low}% of recent scores are in the Low band` });
+        }
+        const health = healthStats[dbId];
+        if (health && health.calls > 0) {
+          const errorRate = Math.round((health.errors / health.calls) * 100);
+          if (errorRate > 20) {
+            alerts.push({ tool: name, dbId, severity: 'critical', message: `Elevated query error rate (${errorRate}%)` });
+          }
+        }
+      }
+
+      const toolReports = reports.filter(r => r.dbId === dbId);
+      if (toolReports.length >= 5) {
+        const failed = toolReports.filter(r => r.status === 'failed').length;
+        const failRate = Math.round((failed / toolReports.length) * 100);
+        if (failRate >= 10) {
+          alerts.push({ tool: name, dbId, severity: 'critical', message: `PDF report generation failing ${failRate}% of the time` });
+        }
+      }
+    }
+
+    if (alerts.length === 0) {
+      alerts.push({ tool: null, dbId: null, severity: 'ok', message: 'All tools operating normally' });
+    }
+
+    res.json({ alerts });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Live Activity (doc section 6) — approximated by polling: merges the
+// most recent completed candidates across tools with this backend's
+// report log, sorted newest first. Not push-based, but no schema
+// change needed.
+app.get('/api/activity', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+    const events = [];
+
+    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
+      const { adapter, candidates } = await fetchCandidatesForTool(dbId);
+      for (const c of candidates) {
+        if (!c.testDate) continue;
+        events.push({ type: 'assessment_completed', tool: adapter.metadata.name, dbId, candidateName: c.name, timestamp: c.testDate });
+      }
+    }
+
+    for (const r of readReports()) {
+      events.push({
+        type: r.status === 'success' ? 'report_generated' : 'report_failed',
+        tool: r.toolName,
+        dbId: r.dbId,
+        candidateName: r.candidateName,
+        timestamp: r.timestamp
+      });
+    }
+
+    events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    res.json({ events: events.slice(0, limit) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
