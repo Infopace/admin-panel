@@ -1,0 +1,20 @@
+[
+  {
+    "id": "1787721591865",
+    "email": "admin@infopace.com",
+    "password": "$2b$10$6qwyhr/cyCXMAd8LKsuF5.Bb/T1A8W5U4R5bRrnZ5uiUq/0jWHhVq",
+    "createdAt": "2026-08-26T05:19:51.865Z"
+  },
+  {
+    "id": "1787721717494",
+    "email": "nenanditha@gmail.com",
+    "password": "$2b$10$lmcVGXoplEAdvkf.E/CJbO3b3VZk6IYeckpC318Fkku4D.S9OOi4W",
+    "createdAt": "2026-08-26T05:21:57.494Z"
+  },
+  {
+    "id": "1787821156616",
+    "email": "www.abhimsd17@gmail.com",
+    "password": "$2b$10$erfE60wrHOjLKR65yy.v0uBwyWbquRMPzZaZKsDCP9kEK1gAT1PtS",
+    "createdAt": "2026-08-27T08:59:16.616Z"
+  }
+]
