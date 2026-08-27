@@ -58,38 +58,60 @@ function TrendIndicator({ trend }) {
   return <span className="trend-indicator flat"><Minus size={14} /> Flat</span>;
 }
 
-// Minimal dependency-free SVG bar chart for the usage trend panel.
+// "2026-08-21" -> "Aug 21"
+function formatShortDate(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+// Minimal dependency-free bar chart for the usage trend panel. Built with
+// flexbox columns (not raw SVG scaling) so bars stay proportioned and a
+// baseline + date labels make it read as a chart even when only one or
+// two days have activity.
 function TrendChart({ series }) {
   if (!series || series.length === 0) {
     return <div className="trend-chart-empty">No activity data for this range.</div>;
   }
 
-  const width = 100;
-  const height = 40;
   const maxVal = Math.max(...series.map(p => p.completed), 1);
-  const barWidth = width / series.length;
+  // Thin out date labels on longer ranges so they don't collide. The
+  // last date is always shown (today); skip the nearest regular tick
+  // if it would land right next to it.
+  const labelEvery = Math.max(1, Math.ceil(series.length / 9));
+  const lastIndex = series.length - 1;
+  const lastRegularTick = Math.floor(lastIndex / labelEvery) * labelEvery;
+  const suppressLastRegularTick = lastIndex - lastRegularTick > 0 && lastIndex - lastRegularTick < labelEvery / 2;
 
   return (
-    <svg className="trend-chart" viewBox={`0 0 ${width} ${height + 8}`} preserveAspectRatio="none">
-      {series.map((point, i) => {
-        const barHeight = (point.completed / maxVal) * height;
-        return (
-          <g key={point.date}>
-            <rect
-              x={i * barWidth + barWidth * 0.15}
-              y={height - barHeight}
-              width={barWidth * 0.7}
-              height={Math.max(barHeight, point.completed > 0 ? 1 : 0)}
-              rx="0.6"
-              fill="var(--accent-primary)"
-              opacity={point.completed > 0 ? 0.9 : 0.15}
-            >
-              <title>{`${point.date}: ${point.completed} completed`}</title>
-            </rect>
-          </g>
-        );
-      })}
-    </svg>
+    <div className="trend-chart">
+      <div className="trend-chart-bars">
+        {series.map(point => (
+          <div className="trend-bar-col" key={point.date}>
+            {point.completed > 0 && (
+              <span className="trend-bar-value">{point.completed}</span>
+            )}
+            <div
+              className="trend-bar"
+              style={{ height: point.completed > 0 ? `${Math.max((point.completed / maxVal) * 100, 4)}%` : '0%' }}
+              title={`${formatShortDate(point.date)}: ${point.completed} completed`}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="trend-chart-axis">
+        {series.map((point, i) => {
+          const isRegularTick = i % labelEvery === 0 && !(suppressLastRegularTick && i === lastRegularTick);
+          if (!isRegularTick && i !== lastIndex) return null;
+          const leftPct = series.length > 1 ? (i / (series.length - 1)) * 100 : 50;
+          return (
+            <span className="trend-chart-label" key={point.date} style={{ left: `${leftPct}%` }}>
+              {formatShortDate(point.date)}
+            </span>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
