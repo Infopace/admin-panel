@@ -14,6 +14,21 @@ const TABLES = {
   ANSWERS: 'cii_answers'
 };
 
+// AI-generated fields can come back as a JSON array/string or plain text
+// depending on how the source app stored them — normalize defensively.
+function formatAiField(field) {
+  if (!field) return null;
+  if (typeof field === 'string') {
+    try {
+      const parsed = JSON.parse(field);
+      return Array.isArray(parsed) ? parsed : field;
+    } catch (e) {
+      return field;
+    }
+  }
+  return field;
+}
+
 // 25 CII Assessment Questions catalog config
 const CII_QUESTIONS = {
   q1: {
@@ -205,7 +220,10 @@ async function getCandidateDetails(supabase, candidateId) {
   // 1. Fetch latest completed test result for this candidate ID
   const { data: results, error: resError } = await supabase
     .from(TABLES.RESULTS)
-    .select('id, session_id, user_id, cii_score, completed_at, employee_name, report_pdf_url, dashboard_png_url')
+    .select(`
+      id, session_id, user_id, cii_score, completed_at, employee_name, report_pdf_url, dashboard_png_url,
+      profile_name, profile_tag, ai_persona_type, ai_narrative, ai_key_insight, ai_strengths, ai_blind_spots, ai_improvements
+    `)
     .eq('user_id', candidateId)
     .order('completed_at', { ascending: false })
     .limit(1);
@@ -310,6 +328,16 @@ async function getCandidateDetails(supabase, candidateId) {
       pdfUrl: result.report_pdf_url,
       screenshotUrl: result.dashboard_png_url
     },
+    aiProfile: {
+      profileName: result.profile_name || null,
+      profileTag: result.profile_tag || null,
+      personaType: result.ai_persona_type || null,
+      narrative: result.ai_narrative || null,
+      keyInsight: result.ai_key_insight || null,
+      strengths: formatAiField(result.ai_strengths),
+      blindSpots: formatAiField(result.ai_blind_spots),
+      improvements: formatAiField(result.ai_improvements)
+    },
     results: resultsList
   };
 }
@@ -367,8 +395,36 @@ function getMockCandidateDetails(candidateId) {
     };
   });
 
+  const mockProfiles = {
+    'cii-cand-1': {
+      profileName: 'The Visionary Architect', profileTag: 'Strategic Innovator',
+      personaType: 'Divergent-Dominant', narrative: 'Dr. Foster shows strong divergent thinking paired with high vision clarity, indicating a natural ability to generate original ideas and translate them into coherent long-term direction.',
+      keyInsight: 'Thrives in ambiguous, undefined problem spaces.',
+      strengths: ['Rapid ideation under uncertainty', 'Cross-domain pattern recognition', 'Comfortable challenging established norms'],
+      blindSpots: ['May underweight execution risk in favor of novelty'],
+      improvements: ['Pair with detail-oriented collaborators during implementation phases']
+    },
+    'cii-cand-2': {
+      profileName: 'The Rapid Synthesizer', profileTag: 'High-Velocity Innovator',
+      personaType: 'Associative-Dominant', narrative: 'Richards demonstrates exceptional associative thinking, connecting distant concepts quickly, with elevated risk tolerance supporting fast experimentation.',
+      keyInsight: 'Excels at combining existing ideas into novel solutions faster than peers.',
+      strengths: ['Fast conceptual synthesis', 'High tolerance for experimentation', 'Strong behavioral drive to build'],
+      blindSpots: ['Risk of moving to solutions before fully framing the problem'],
+      improvements: ['Add a structured problem-validation step before prototyping']
+    },
+    'cii-cand-3': {
+      profileName: 'The Systematic Innovator', profileTag: 'Balanced Creative',
+      personaType: 'Balanced Profile', narrative: 'Lovelace shows an even profile across all six dimensions, suggesting adaptable creative capacity across ideation, evaluation, and execution.',
+      keyInsight: 'No single dominant dimension — strength is versatility across creative modes.',
+      strengths: ['Balances novel thinking with practical follow-through', 'Adapts approach to context'],
+      blindSpots: ['May default to consensus-seeking on high-ambiguity calls'],
+      improvements: ['Practice making higher-conviction calls with incomplete information']
+    }
+  };
+
   return {
     personalInfo,
+    aiProfile: mockProfiles[personalInfo.id] || mockProfiles['cii-cand-1'],
     results: resultsList
   };
 }

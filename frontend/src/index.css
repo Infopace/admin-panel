@@ -1254,3 +1254,94 @@ body {
     grid-template-columns: 100px 1fr 40px;
   }
 }
+
+/* AI Profile card (candidate drawer) */
+.ai-profile-card {
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.06), rgba(8, 145, 178, 0.04));
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.ai-profile-header h4 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ai-profile-tag {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--accent-primary);
+  background-color: rgba(79, 70, 229, 0.1);
+  padding: 0.15rem 0.5rem;
+  border-radius: 50px;
+}
+
+.ai-profile-narrative {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-top: 0.75rem;
+}
+
+.ai-profile-key-insight {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  background-color: rgba(255, 255, 255, 0.6);
+  border-left: 3px solid var(--accent-primary);
+  padding: 0.5rem 0.75rem;
+  border-radius: 0 0.35rem 0.35rem 0;
+  margin-top: 0.75rem;
+}
+
+.ai-profile-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 640px) {
+  .ai-profile-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ai-profile-col-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-bottom: 0.4rem;
+}
+
+.ai-profile-col-title.strengths { color: var(--accent-success); }
+.ai-profile-col-title.blindspots { color: var(--accent-warning); }
+.ai-profile-col-title.improvements { color: var(--accent-secondary); }
+
+.ai-profile-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.ai-profile-list li {
+  font-size: 0.83rem;
+  color: var(--text-secondary);
+  padding-left: 0.9rem;
+  position: relative;
+  line-height: 1.4;
+}
+
+.ai-profile-list li::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: var(--text-muted);
+}

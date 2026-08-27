@@ -1226,6 +1226,66 @@ function App() {
                       </div>
                     </div>
 
+                    {candidateDetails.aiProfile && (candidateDetails.aiProfile.profileName || candidateDetails.aiProfile.narrative) && (
+                      <div className="ai-profile-card">
+                        <div className="ai-profile-header">
+                          <div>
+                            <h4 style={{ marginBottom: '0.15rem' }}>{candidateDetails.aiProfile.profileName || 'AI Profile'}</h4>
+                            {candidateDetails.aiProfile.personaType && (
+                              <span className="ai-profile-tag">{candidateDetails.aiProfile.personaType}</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {candidateDetails.aiProfile.narrative && (
+                          <p className="ai-profile-narrative">{candidateDetails.aiProfile.narrative}</p>
+                        )}
+
+                        {candidateDetails.aiProfile.keyInsight && (
+                          <div className="ai-profile-key-insight">
+                            <strong>Key Insight:</strong> {candidateDetails.aiProfile.keyInsight}
+                          </div>
+                        )}
+
+                        <div className="ai-profile-columns">
+                          {candidateDetails.aiProfile.strengths && (
+                            <div className="ai-profile-col">
+                              <div className="ai-profile-col-title strengths">Strengths</div>
+                              <ul className="ai-profile-list">
+                                {(Array.isArray(candidateDetails.aiProfile.strengths)
+                                  ? candidateDetails.aiProfile.strengths
+                                  : [candidateDetails.aiProfile.strengths]
+                                ).map((s, i) => <li key={i}>{s}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                          {candidateDetails.aiProfile.blindSpots && (
+                            <div className="ai-profile-col">
+                              <div className="ai-profile-col-title blindspots">Blind Spots</div>
+                              <ul className="ai-profile-list">
+                                {(Array.isArray(candidateDetails.aiProfile.blindSpots)
+                                  ? candidateDetails.aiProfile.blindSpots
+                                  : [candidateDetails.aiProfile.blindSpots]
+                                ).map((s, i) => <li key={i}>{s}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+
+                        {candidateDetails.aiProfile.improvements && (
+                          <div className="ai-profile-col" style={{ marginTop: '0.75rem' }}>
+                            <div className="ai-profile-col-title improvements">Improvement Areas</div>
+                            <ul className="ai-profile-list">
+                              {(Array.isArray(candidateDetails.aiProfile.improvements)
+                                ? candidateDetails.aiProfile.improvements
+                                : [candidateDetails.aiProfile.improvements]
+                              ).map((s, i) => <li key={i}>{s}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <h4 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '1rem' }}>Test Questions & Answers</h4>
                     <div className="question-list">
                       {candidateDetails.results.map((item, index) => {
