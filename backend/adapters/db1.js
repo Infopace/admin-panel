@@ -374,6 +374,59 @@ function getMockCandidateDetails(candidateId) {
 }
 
 /**
+ * Tool-Specific Dimensions (doc section 10). Verified via schema audit:
+ * cii_results stores six pre-computed per-dimension scores (0-100) per
+ * candidate alongside the overall cii_score.
+ */
+const DIMENSION_LABELS = {
+  dim_divergent: 'Divergent Thinking',
+  dim_assoc: 'Associative Thinking',
+  dim_risk: 'Risk Tolerance',
+  dim_vision: 'Vision Clarity',
+  dim_behavior: 'Behavioral Style',
+  dim_innovation: 'Innovation Index'
+};
+
+async function getDimensionAverages(supabase) {
+  const { data, error } = await supabase
+    .from(TABLES.RESULTS)
+    .select('dim_divergent, dim_assoc, dim_risk, dim_vision, dim_behavior, dim_innovation');
+
+  if (error) throw error;
+
+  const keys = Object.keys(DIMENSION_LABELS);
+  const sums = {};
+  const counts = {};
+  keys.forEach(k => { sums[k] = 0; counts[k] = 0; });
+
+  data.forEach(row => {
+    keys.forEach(k => {
+      if (row[k] !== null && row[k] !== undefined) {
+        sums[k] += Number(row[k]);
+        counts[k]++;
+      }
+    });
+  });
+
+  return keys.map(k => ({
+    key: k,
+    label: DIMENSION_LABELS[k],
+    average: counts[k] > 0 ? Math.round(sums[k] / counts[k]) : null
+  }));
+}
+
+function getMockDimensionAverages() {
+  return [
+    { key: 'dim_divergent', label: 'Divergent Thinking', average: 78 },
+    { key: 'dim_assoc', label: 'Associative Thinking', average: 71 },
+    { key: 'dim_risk', label: 'Risk Tolerance', average: 64 },
+    { key: 'dim_vision', label: 'Vision Clarity', average: 82 },
+    { key: 'dim_behavior', label: 'Behavioral Style', average: 69 },
+    { key: 'dim_innovation', label: 'Innovation Index', average: 75 }
+  ];
+}
+
+/**
  * Organization + user monitoring (Phase 5).
  * Verified via schema audit: cii_results has org_id, department, and
  * user_id alongside cii_score — so both breakdowns are real here.
@@ -455,6 +508,8 @@ module.exports = {
   getMockCandidateDetails,
   getOrgBreakdown,
   getUserBreakdown,
+  getDimensionAverages,
+  getMockDimensionAverages,
   metadata: {
     name: 'Creative and Innovation',
     description: 'Measures divergent thinking, creative problem-solving capability, and organizational innovation style.'

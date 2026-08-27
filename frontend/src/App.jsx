@@ -146,6 +146,11 @@ function App() {
   const [assessmentMode, setAssessmentMode] = useState('mock');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Organization / User / Dimension monitoring for the selected tool
+  const [orgBreakdown, setOrgBreakdown] = useState({ supported: false, organizations: [] });
+  const [userBreakdown, setUserBreakdown] = useState({ supported: false, totalUniqueUsers: 0, averageAttemptsPerUser: 0, users: [] });
+  const [dimensionData, setDimensionData] = useState({ supported: false, dimensions: [] });
+
   // Selected Candidate Drawer State
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [candidateDetails, setCandidateDetails] = useState(null);
@@ -332,10 +337,30 @@ function App() {
           setLoading(false);
         }
       };
+      const fetchBreakdowns = async () => {
+        try {
+          const [orgRes, userRes, dimRes] = await Promise.all([
+            authFetch(`${API_BASE}/assessments/${currentView}/organizations`),
+            authFetch(`${API_BASE}/assessments/${currentView}/users`),
+            authFetch(`${API_BASE}/assessments/${currentView}/dimensions`)
+          ]);
+          setOrgBreakdown(await orgRes.json());
+          setUserBreakdown(await userRes.json());
+          setDimensionData(await dimRes.json());
+        } catch (err) {
+          console.error('Error fetching org/user/dimension breakdowns:', err);
+        }
+      };
       fetchCandidates();
+      fetchBreakdowns();
       setSelectedCandidate(null);
       setCandidateDetails(null);
       setSearchQuery('');
+      // Reset immediately so switching from a tool that supports these
+      // panels to one that doesn't isn't left showing stale data.
+      setOrgBreakdown({ supported: false, organizations: [] });
+      setUserBreakdown({ supported: false, totalUniqueUsers: 0, averageAttemptsPerUser: 0, users: [] });
+      setDimensionData({ supported: false, dimensions: [] });
     }
   }, [currentView, token]);
 
@@ -891,6 +916,106 @@ function App() {
                 </span>
               </div>
             </div>
+
+            {/* Tool-Specific Dimensions */}
+            {dimensionData.supported && dimensionData.dimensions.length > 0 && (
+              <div className="panel">
+                <div className="panel-header">
+                  <h2>Tool Dimensions</h2>
+                </div>
+                <div className="dimension-list">
+                  {dimensionData.dimensions.map(dim => (
+                    <div className="dimension-row" key={dim.key}>
+                      <span className="dimension-label">{dim.label}</span>
+                      <div className="dimension-track">
+                        <div className="dimension-fill" style={{ width: `${dim.average ?? 0}%` }} />
+                      </div>
+                      <span className="dimension-value">{dim.average !== null ? `${dim.average}%` : 'N/A'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Organization + User Monitoring */}
+            {(orgBreakdown.supported || userBreakdown.supported) && (
+              <div className="split-grid">
+                {orgBreakdown.supported && (
+                  <div className="panel">
+                    <div className="panel-header">
+                      <h2>Organization Monitoring</h2>
+                    </div>
+                    {orgBreakdown.organizations.length === 0 ? (
+                      <div className="trend-chart-empty">No organization data yet.</div>
+                    ) : (
+                      <div className="table-container">
+                        <table className="custom-table">
+                          <thead>
+                            <tr>
+                              <th>Organization</th>
+                              <th>Assessments</th>
+                              <th>Avg Score</th>
+                              <th>Last Activity</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {orgBreakdown.organizations.slice(0, 10).map(org => (
+                              <tr key={org.organization}>
+                                <td>{org.organization}</td>
+                                <td>{org.totalAssessments}</td>
+                                <td>{org.averageScore}</td>
+                                <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                  {org.lastActivity ? new Date(org.lastActivity).toLocaleDateString() : 'N/A'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {userBreakdown.supported && (
+                  <div className="panel">
+                    <div className="panel-header">
+                      <h2>User Monitoring</h2>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        {userBreakdown.totalUniqueUsers} unique · {userBreakdown.averageAttemptsPerUser} avg attempts/user
+                      </span>
+                    </div>
+                    {userBreakdown.users.length === 0 ? (
+                      <div className="trend-chart-empty">No user data yet.</div>
+                    ) : (
+                      <div className="table-container">
+                        <table className="custom-table">
+                          <thead>
+                            <tr>
+                              <th>User</th>
+                              <th>Attempts</th>
+                              <th>Avg Score</th>
+                              <th>Last Activity</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {userBreakdown.users.slice(0, 10).map(u => (
+                              <tr key={u.userId}>
+                                <td>{u.name}</td>
+                                <td>{u.attempts}</td>
+                                <td>{u.averageScore}</td>
+                                <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                  {u.lastActivity ? new Date(u.lastActivity).toLocaleDateString() : 'N/A'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {loading ? (
               <div style={{ padding: '4rem', textAlign: 'center', color: '#94a3b8' }}>

@@ -729,6 +729,31 @@ app.get('/api/assessments/:dbId/candidates/:candidateId/pdf', async (req, res) =
   }
 });
 
+// Tool-Specific Dimensions (doc section 10) — only implemented where the
+// schema audit confirmed real per-dimension score columns (currently db1).
+app.get('/api/assessments/:dbId/dimensions', async (req, res) => {
+  const { dbId } = req.params;
+  const adapter = ADAPTERS[dbId];
+  if (!adapter) {
+    return res.status(400).json({ error: 'Invalid database identifier.' });
+  }
+  if (typeof adapter.getDimensionAverages !== 'function') {
+    return res.status(200).json({ supported: false, dimensions: [] });
+  }
+
+  const client = getSupabaseClient(dbId);
+  if (!client) {
+    return res.status(200).json({ supported: true, mode: 'mock', dimensions: adapter.getMockDimensionAverages() });
+  }
+
+  try {
+    const dimensions = await adapter.getDimensionAverages(client);
+    res.json({ supported: true, mode: 'live', dimensions });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Organization monitoring (Phase 5) — only implemented for tools where
 // the schema audit confirmed a real org column (db1, db3, db4, db5).
 app.get('/api/assessments/:dbId/organizations', async (req, res) => {
