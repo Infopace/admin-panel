@@ -614,6 +614,7 @@ module.exports = {
   getMockPaymentSummary,
   metadata: {
     name: 'Creative and Innovation',
+    category: 'AI Assessment',
     description: 'Measures divergent thinking, creative problem-solving capability, and organizational innovation style.'
   }
 };

@@ -264,6 +264,7 @@ module.exports = {
   getMockPaymentSummary,
   metadata: {
     name: 'Market Research',
+    category: 'AI Assessment',
     description: 'Analyzes the total addressable market (TAM), competitor landscape, pricing strategies, and growth drivers for candidate businesses.'
   }
 };

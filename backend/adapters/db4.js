@@ -280,6 +280,7 @@ module.exports = {
   getMockPaymentSummary,
   metadata: {
     name: 'Market Potential',
+    category: 'AI Assessment',
     description: 'Evaluates startup submissions on market sizing (TAM/SAM/SOM), product-market fit, risk profiles, and business model feasibility.'
   }
 };

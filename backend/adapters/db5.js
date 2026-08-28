@@ -302,6 +302,7 @@ module.exports = {
   getOrgBreakdown,
   metadata: {
     name: 'Venture Risk Assessment',
+    category: 'AI Assessment',
     description: 'Evaluates operational, financial, cyber, strategic, and compliance risks, calculating domain stress scores and flagging potential crisis areas.'
   }
 };

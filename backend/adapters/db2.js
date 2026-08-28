@@ -215,6 +215,7 @@ module.exports = {
   getMockCandidateDetails,
   metadata: {
     name: 'Founder and Co-founder Compatibility',
+    category: 'AI Assessment',
     description: 'Evaluates the core values, management alignment, risk styles, and working habits between co-founders.'
   }
 };

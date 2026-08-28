@@ -386,6 +386,7 @@ app.get('/api/overview', async (req, res) => {
       overview.push({
         id: dbId,
         name: adapter.metadata.name,
+        category: adapter.metadata.category || 'Uncategorized',
         description: adapter.metadata.description,
         mode: isMock ? 'mock' : 'live',
         ...stats,
@@ -444,6 +445,48 @@ app.get('/api/overview/summary', async (req, res) => {
       // inProgress, abandoned, completionRate, avgCompletionTime,
       // activeUsers, activeOrganizations, reportsGenerated, reportsPending
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Cross-tool Organizations/Users/Reports summary (doc section 16's
+// bottom row). Not deduplicated across tools — each source database
+// is a separate system, so the same org/user name appearing in two
+// tools isn't necessarily the same real-world entity. Only counts
+// live tools; mock-mode org/user breakdowns are empty anyway.
+app.get('/api/overview/entities', async (req, res) => {
+  try {
+    let totalOrganizations = 0;
+    let totalUsers = 0;
+
+    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
+      const adapter = ADAPTERS[dbId];
+      const client = getSupabaseClient(dbId);
+      if (!client) continue;
+
+      if (typeof adapter.getOrgBreakdown === 'function') {
+        try {
+          const orgs = await adapter.getOrgBreakdown(client);
+          totalOrganizations += orgs.length;
+        } catch (err) {
+          console.warn(`getOrgBreakdown failed for ${dbId} during entities summary:`, err.message);
+        }
+      }
+
+      if (typeof adapter.getUserBreakdown === 'function') {
+        try {
+          const result = await adapter.getUserBreakdown(client);
+          totalUsers += result.totalUniqueUsers;
+        } catch (err) {
+          console.warn(`getUserBreakdown failed for ${dbId} during entities summary:`, err.message);
+        }
+      }
+    }
+
+    const totalReports = readReports().filter(r => r.status === 'success').length;
+
+    res.json({ totalOrganizations, totalUsers, totalReports });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

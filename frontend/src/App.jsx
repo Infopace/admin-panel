@@ -144,6 +144,7 @@ function App() {
   const [alertsData, setAlertsData] = useState([]);
   const [healthData, setHealthData] = useState(null);
   const [reportsSummary, setReportsSummary] = useState(null);
+  const [entitySummary, setEntitySummary] = useState(null);
 
   // Assessment Details State
   const [candidates, setCandidates] = useState([]);
@@ -301,14 +302,16 @@ function App() {
     if (!token || currentView !== 'analytics') return;
     const fetchAnalyticsCrossTool = async () => {
       try {
-        const [healthRes, alertsRes, reportsRes] = await Promise.all([
+        const [healthRes, alertsRes, reportsRes, entitiesRes] = await Promise.all([
           authFetch(`${API_BASE}/health`),
           authFetch(`${API_BASE}/alerts`),
-          authFetch(`${API_BASE}/reports/summary`)
+          authFetch(`${API_BASE}/reports/summary`),
+          authFetch(`${API_BASE}/overview/entities`)
         ]);
         setHealthData(await healthRes.json());
         setAlertsData((await alertsRes.json()).alerts || []);
         setReportsSummary(await reportsRes.json());
+        setEntitySummary(await entitiesRes.json());
       } catch (err) {
         console.error('Error fetching analytics cross-tool data:', err);
       }
@@ -859,10 +862,13 @@ function App() {
                       <thead>
                         <tr>
                           <th>Assessment Name</th>
+                          <th>Category</th>
                           <th>Data Source Mode</th>
                           <th>Active Records</th>
                           <th>Avg / Median Score</th>
                           <th>Score Distribution</th>
+                          <th>Reports</th>
+                          <th>Error Rate</th>
                           <th>Last Activity</th>
                           <th>Trend</th>
                           <th>Status Health</th>
@@ -870,43 +876,58 @@ function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {overviewData.map(item => (
-                          <tr key={item.id} onClick={() => setAnalyticsTool(item.id)}>
-                            <td>
-                              <div style={{ fontWeight: '600' }}>{item.name}</div>
-                              <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{item.description}</div>
-                            </td>
-                            <td>
-                              <span className={`mode-badge ${item.mode === 'live' ? 'live' : 'mock'}`}>
-                                {item.mode} Mode
-                              </span>
-                            </td>
-                            <td>{item.totalTestTakers} candidates</td>
-                            <td>{item.averageScorePercentage}% / {item.medianScorePercentage}%</td>
-                            <td>
-                              <div style={{ display: 'flex', gap: '0.3rem', fontSize: '0.75rem' }}>
-                                <span className="score-badge low" title="Low scorers">L {item.scoreDistribution.low}%</span>
-                                <span className="score-badge medium" title="Medium scorers">M {item.scoreDistribution.medium}%</span>
-                                <span className="score-badge high" title="High scorers">H {item.scoreDistribution.high}%</span>
-                              </div>
-                            </td>
-                            <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                              {item.lastActivity ? new Date(item.lastActivity).toLocaleDateString() : 'N/A'}
-                            </td>
-                            <td>
-                              <TrendIndicator trend={item.trend} />
-                            </td>
-                            <td>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                <span className={`status-dot ${item.mode === 'live' ? 'online' : 'offline'}`}></span>
-                                <span style={{ fontSize: '0.85rem' }}>{item.mode === 'live' ? 'Online/Live' : 'Using Fallback Mock'}</span>
-                              </div>
-                            </td>
-                            <td>
-                              <button className="btn btn-secondary btn-sm">View Details</button>
-                            </td>
-                          </tr>
-                        ))}
+                        {overviewData.map(item => {
+                          const toolReports = reportsSummary && reportsSummary.byTool ? reportsSummary.byTool[item.id] : null;
+                          const toolHealth = healthData ? healthData[item.id] : null;
+                          return (
+                            <tr key={item.id} onClick={() => setAnalyticsTool(item.id)}>
+                              <td>
+                                <div style={{ fontWeight: '600' }}>{item.name}</div>
+                                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{item.description}</div>
+                              </td>
+                              <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{item.category}</td>
+                              <td>
+                                <span className={`mode-badge ${item.mode === 'live' ? 'live' : 'mock'}`}>
+                                  {item.mode} Mode
+                                </span>
+                              </td>
+                              <td>{item.totalTestTakers} candidates</td>
+                              <td>{item.averageScorePercentage}% / {item.medianScorePercentage}%</td>
+                              <td>
+                                <div style={{ display: 'flex', gap: '0.3rem', fontSize: '0.75rem' }}>
+                                  <span className="score-badge low" title="Low scorers">L {item.scoreDistribution.low}%</span>
+                                  <span className="score-badge medium" title="Medium scorers">M {item.scoreDistribution.medium}%</span>
+                                  <span className="score-badge high" title="High scorers">H {item.scoreDistribution.high}%</span>
+                                </div>
+                              </td>
+                              <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                {toolReports ? `${toolReports.generated} ok / ${toolReports.failed} failed` : '—'}
+                              </td>
+                              <td style={{ fontSize: '0.8rem' }}>
+                                {toolHealth && toolHealth.calls > 0 ? (
+                                  <span style={{ color: toolHealth.errorRate > 20 ? 'var(--accent-danger)' : 'var(--text-secondary)' }}>
+                                    {toolHealth.errorRate}%
+                                  </span>
+                                ) : '—'}
+                              </td>
+                              <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                {item.lastActivity ? new Date(item.lastActivity).toLocaleDateString() : 'N/A'}
+                              </td>
+                              <td>
+                                <TrendIndicator trend={item.trend} />
+                              </td>
+                              <td>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                  <span className={`status-dot ${item.mode === 'live' ? 'online' : 'offline'}`}></span>
+                                  <span style={{ fontSize: '0.85rem' }}>{item.mode === 'live' ? 'Online/Live' : 'Using Fallback Mock'}</span>
+                                </div>
+                              </td>
+                              <td>
+                                <button className="btn btn-secondary btn-sm">View Details</button>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -995,6 +1016,33 @@ function App() {
                     </div>
                   )}
                 </div>
+
+                {/* Organizations / Users / Reports summary row (doc section 16) */}
+                {entitySummary && (
+                  <div className="stats-grid">
+                    <div className="stat-card">
+                      <div>
+                        <span className="stat-label">Organizations</span>
+                        <div className="stat-value">{entitySummary.totalOrganizations}</div>
+                        <span className="stat-desc">Across live-connected tools</span>
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <div>
+                        <span className="stat-label">Users</span>
+                        <div className="stat-value">{entitySummary.totalUsers}</div>
+                        <span className="stat-desc">Across live-connected tools</span>
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <div>
+                        <span className="stat-label">Reports</span>
+                        <div className="stat-value">{entitySummary.totalReports}</div>
+                        <span className="stat-desc">Successfully generated</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </>
             ) : (
               (() => {
@@ -1164,6 +1212,12 @@ function App() {
                               <div className="trend-chart-empty">No organization data yet.</div>
                             ) : (
                               <div className="table-container">
+                                {orgBreakdown.organizations.length > 1 && (
+                                  <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                                    <span>Most active: <strong>{orgBreakdown.organizations[0].organization}</strong></span>
+                                    <span>Least active: <strong>{orgBreakdown.organizations[orgBreakdown.organizations.length - 1].organization}</strong></span>
+                                  </div>
+                                )}
                                 <table className="custom-table">
                                   <thead>
                                     <tr>
