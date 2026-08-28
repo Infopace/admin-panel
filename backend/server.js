@@ -979,6 +979,21 @@ app.get('/api/alerts', async (req, res) => {
             alerts.push({ tool: name, dbId, severity: 'critical', message: `Elevated query error rate (${errorRate}%)` });
           }
         }
+
+        if (typeof adapter.getPaymentSummary === 'function') {
+          try {
+            const client = getSupabaseClient(dbId);
+            if (client) {
+              const payment = await adapter.getPaymentSummary(client);
+              const paymentTotal = payment.paidCount + payment.unpaidCount;
+              if (paymentTotal >= 5 && payment.paymentRate < 20) {
+                alerts.push({ tool: name, dbId, severity: 'warning', message: `Low payment conversion — only ${payment.paymentRate}% of submissions convert (${payment.paidCount}/${paymentTotal})` });
+              }
+            }
+          } catch (err) {
+            console.warn(`Payment summary failed for ${dbId} during alerts check:`, err.message);
+          }
+        }
       }
 
       const toolReports = reports.filter(r => r.dbId === dbId);
