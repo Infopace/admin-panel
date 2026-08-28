@@ -281,6 +281,7 @@ module.exports = {
   metadata: {
     name: 'Market Potential',
     category: 'AI Assessment',
+    siteUrl: 'https://mpa.infopaceindia.co.in',
     description: 'Evaluates startup submissions on market sizing (TAM/SAM/SOM), product-market fit, risk profiles, and business model feasibility.'
   }
 };

@@ -895,9 +895,53 @@ app.get('/api/assessments/:dbId/users', async (req, res) => {
 // columns required.
 // -------------------------------------------------------------
 
+// Tool Availability — pings each tool's actual public-facing website.
+// This is deliberately separate from the Supabase query health below:
+// a database can be perfectly reachable while the real candidate-
+// facing site is suspended (confirmed case: mpa.infopaceindia.co.in
+// returned "This service has been suspended by its owner" while its
+// Supabase queries kept succeeding). Cached per tool so /api/health
+// doesn't do a live network round-trip on every request.
+const availabilityCache = {};
+const AVAILABILITY_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function checkToolAvailability(dbId) {
+  const url = ADAPTERS[dbId].metadata.siteUrl;
+  if (!url) return null;
+
+  const cached = availabilityCache[dbId];
+  if (cached && Date.now() - cached.checkedAt < AVAILABILITY_TTL_MS) {
+    return cached;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  let result;
+  try {
+    const res = await fetch(url, { method: 'GET', redirect: 'follow', signal: controller.signal });
+    const bodyText = (await res.text()).slice(0, 2000);
+    // Some suspended-hosting pages return HTTP 200 with a short plain-
+    // text "suspended" message instead of an error status.
+    const suspended = /suspended/i.test(bodyText) && bodyText.trim().length < 500;
+    result = {
+      url,
+      status: !res.ok ? 'down' : suspended ? 'suspended' : 'up',
+      statusCode: res.status,
+      checkedAt: Date.now()
+    };
+  } catch (err) {
+    result = { url, status: 'down', statusCode: null, error: err.message, checkedAt: Date.now() };
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  availabilityCache[dbId] = result;
+  return result;
+}
+
 // System / Health Monitoring (doc section 14) — per-adapter query
-// health since the backend started.
-app.get('/api/health', (req, res) => {
+// health since the backend started, plus real Tool Availability.
+app.get('/api/health', async (req, res) => {
   const health = {};
   for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
     const stat = healthStats[dbId];
@@ -912,6 +956,8 @@ app.get('/api/health', (req, res) => {
     else if (errorRate > 0) status = 'warning';
     else if (stat.calls > 0) status = 'healthy';
 
+    const availability = await checkToolAvailability(dbId);
+
     health[dbId] = {
       name: ADAPTERS[dbId].metadata.name,
       status,
@@ -921,7 +967,8 @@ app.get('/api/health', (req, res) => {
       avgLatencyMs,
       lastError: stat.lastError,
       lastErrorAt: stat.lastErrorAt,
-      lastSuccessAt: stat.lastSuccessAt
+      lastSuccessAt: stat.lastSuccessAt,
+      availability
     };
   }
   res.json(health);
@@ -1025,6 +1072,16 @@ app.get('/api/alerts', async (req, res) => {
       const stats = computeToolStats(candidates);
       const trend = computeTrend(candidates);
       const name = adapter.metadata.name;
+
+      // Site availability is independent of DB mock/live status — the
+      // public site can be down even while mock data is showing fine.
+      const availability = await checkToolAvailability(dbId);
+      if (availability && availability.status !== 'up') {
+        const reason = availability.status === 'suspended'
+          ? 'the hosting service reports it as suspended'
+          : `it returned ${availability.statusCode || 'no response'}`;
+        alerts.push({ tool: name, dbId, severity: 'critical', message: `Tool website is unreachable — ${reason} (${availability.url})` });
+      }
 
       if (isMock) {
         alerts.push({ tool: name, dbId, severity: 'info', message: 'Running on mock data — live Supabase connection not configured' });

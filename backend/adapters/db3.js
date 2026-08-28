@@ -265,6 +265,7 @@ module.exports = {
   metadata: {
     name: 'Market Research',
     category: 'AI Assessment',
+    siteUrl: 'https://mra.infopaceindia.co.in',
     description: 'Analyzes the total addressable market (TAM), competitor landscape, pricing strategies, and growth drivers for candidate businesses.'
   }
 };

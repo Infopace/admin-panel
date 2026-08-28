@@ -303,6 +303,7 @@ module.exports = {
   metadata: {
     name: 'Venture Risk Assessment',
     category: 'AI Assessment',
+    siteUrl: 'https://risk.infopaceindia.co.in',
     description: 'Evaluates operational, financial, cyber, strategic, and compliance risks, calculating domain stress scores and flagging potential crisis areas.'
   }
 };

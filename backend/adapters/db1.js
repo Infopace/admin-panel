@@ -615,6 +615,7 @@ module.exports = {
   metadata: {
     name: 'Creative and Innovation',
     category: 'AI Assessment',
+    siteUrl: 'https://cii.infopaceindia.co.in',
     description: 'Measures divergent thinking, creative problem-solving capability, and organizational innovation style.'
   }
 };

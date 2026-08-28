@@ -77,6 +77,20 @@ function TodaySnapshot({ activityData }) {
   );
 }
 
+// Real Tool Availability — pings the tool's actual public website,
+// separate from the DB-query health pill next to it. A tool can be
+// "healthy" on DB queries while its public site is suspended.
+function AvailabilityPill({ availability }) {
+  if (!availability) return null;
+  const labels = { up: 'Site Up', suspended: 'Site Suspended', down: 'Site Down' };
+  const classes = { up: 'healthy', suspended: 'critical', down: 'critical' };
+  return (
+    <span className={`health-status-pill ${classes[availability.status] || 'unknown'}`} title={availability.url}>
+      {labels[availability.status] || 'Unknown'}
+    </span>
+  );
+}
+
 function TrendIndicator({ trend }) {
   if (!trend) return null;
   const { direction, changePercent } = trend;
@@ -1068,7 +1082,10 @@ function App() {
                           <div className="health-card" key={dbId}>
                             <div className="health-card-header">
                               <span>{h.name}</span>
-                              <span className={`health-status-pill ${h.status}`}>{h.status}</span>
+                              <div style={{ display: 'flex', gap: '0.35rem' }}>
+                                <AvailabilityPill availability={h.availability} />
+                                <span className={`health-status-pill ${h.status}`}>{h.status}</span>
+                              </div>
                             </div>
                             <div className="health-card-meta">
                               {h.calls > 0 ? (
@@ -1387,9 +1404,22 @@ function App() {
                           const h = healthData[analyticsTool];
                           return (
                             <div className="health-grid">
+                              {h.availability && (
+                                <div className="health-card">
+                                  <div className="health-card-header">
+                                    <span>Tool Availability</span>
+                                    <AvailabilityPill availability={h.availability} />
+                                  </div>
+                                  <div className="health-card-meta">
+                                    {h.availability.url}
+                                    {h.availability.statusCode && <> · HTTP {h.availability.statusCode}</>}
+                                    <div>Checked: {new Date(h.availability.checkedAt).toLocaleString()}</div>
+                                  </div>
+                                </div>
+                              )}
                               <div className="health-card">
                                 <div className="health-card-header">
-                                  <span>Assessment Service</span>
+                                  <span>Assessment Service (DB queries)</span>
                                   <span className={`health-status-pill ${h.status}`}>{h.status}</span>
                                 </div>
                                 <div className="health-card-meta">
