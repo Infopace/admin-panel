@@ -986,6 +986,7 @@ body {
 }
 
 .trend-bar-col {
+  position: relative;
   flex: 1;
   min-width: 2px;
   height: 100%;
