@@ -47,6 +47,36 @@ function timeAgo(isoString) {
   return `${days}d ago`;
 }
 
+function isToday(isoString) {
+  const d = new Date(isoString);
+  const now = new Date();
+  return d.getUTCFullYear() === now.getUTCFullYear() &&
+    d.getUTCMonth() === now.getUTCMonth() &&
+    d.getUTCDate() === now.getUTCDate();
+}
+
+// Live Activity "Today's Snapshot" (doc section 6) — derived client-side
+// from the already-fetched activity feed rather than a new endpoint.
+// Active Sessions / Currently Processing have no real value: reports
+// generate synchronously (never queued), so those are always 0 — shown
+// with a note rather than omitted, since the doc explicitly asks for them.
+function TodaySnapshot({ activityData }) {
+  const todays = activityData.filter(e => isToday(e.timestamp));
+  const completedToday = todays.filter(e => e.type === 'assessment_completed').length;
+  const reportsGeneratedToday = todays.filter(e => e.type === 'report_generated').length;
+  const reportsFailedToday = todays.filter(e => e.type === 'report_failed').length;
+
+  return (
+    <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border-color)' }}>
+      <span>Completed today: <strong>{completedToday}</strong></span>
+      <span>Reports generated today: <strong>{reportsGeneratedToday}</strong></span>
+      <span>Reports failed today: <strong>{reportsFailedToday}</strong></span>
+      <span title="No session queue exists — every report request completes synchronously">Currently processing: <strong>0</strong></span>
+      <span title="No session-tracking data exists yet — needs source-app instrumentation">Active sessions: <strong>N/A</strong></span>
+    </div>
+  );
+}
+
 function TrendIndicator({ trend }) {
   if (!trend) return null;
   const { direction, changePercent } = trend;
@@ -821,6 +851,34 @@ function App() {
                     </div>
                     <div className="stat-card">
                       <div>
+                        <span className="stat-label">Reports Pending</span>
+                        <div className="stat-value">0</div>
+                        <span className="stat-desc">Generated synchronously — never queued</span>
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <div>
+                        <span className="stat-label">Active Users</span>
+                        <div className="stat-value">{entitySummary ? entitySummary.totalUsers : '—'}</div>
+                        <span className="stat-desc">Across live-connected tools</span>
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <div>
+                        <span className="stat-label">Active Organizations</span>
+                        <div className="stat-value">{entitySummary ? entitySummary.totalOrganizations : '—'}</div>
+                        <span className="stat-desc">Across live-connected tools</span>
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <div>
+                        <span className="stat-label">Failed Requests</span>
+                        <div className="stat-value">{healthData ? Object.values(healthData).reduce((sum, h) => sum + h.errors, 0) : '—'}</div>
+                        <span className="stat-desc">Live query errors since server start</span>
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <div>
                         <span className="stat-label">Last Activity</span>
                         <div className="stat-value" style={{ fontSize: '1.1rem' }}>
                           {summaryData.lastActivity ? new Date(summaryData.lastActivity).toLocaleString() : 'No activity yet'}
@@ -939,6 +997,7 @@ function App() {
                     <div className="panel-header">
                       <h2>Live Activity</h2>
                     </div>
+                    <TodaySnapshot activityData={activityData} />
                     {activityData.length === 0 ? (
                       <div className="trend-chart-empty">No recent activity.</div>
                     ) : (
@@ -987,13 +1046,17 @@ function App() {
                     <h2><HeartPulse size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />System Health</h2>
                     {reportsSummary && (
                       <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
-                        <span><FileCheck2 size={13} style={{ verticalAlign: '-2px' }} /> {reportsSummary.totalGenerated} reports generated</span>
+                        <span><FileCheck2 size={13} style={{ verticalAlign: '-2px' }} /> {reportsSummary.totalGenerated} generated / downloaded</span>
                         <span>{reportsSummary.totalFailed} failed</span>
+                        <span>0 pending</span>
                         <span>{reportsSummary.totalRegenerated} regenerated</span>
                         <span>{reportsSummary.successRate}% success rate</span>
                         {reportsSummary.avgGenerationTimeMs !== null && (
                           <span>{reportsSummary.avgGenerationTimeMs}ms avg generation time</span>
                         )}
+                        <span className={`health-status-pill ${reportsSummary.successRate >= 95 ? 'healthy' : reportsSummary.successRate >= 80 ? 'warning' : 'critical'}`}>
+                          Report Service: {reportsSummary.successRate >= 95 ? 'Healthy' : reportsSummary.successRate >= 80 ? 'Degraded' : 'Critical'}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -1009,9 +1072,12 @@ function App() {
                             </div>
                             <div className="health-card-meta">
                               {h.calls > 0 ? (
-                                <>{h.avgLatencyMs}ms avg · {h.errorRate}% error rate ({h.calls} calls)</>
+                                <>{h.avgLatencyMs}ms avg · {h.errorRate}% error rate · {h.errors} failed requests ({h.calls} calls)</>
                               ) : (
                                 <>No live query attempts yet</>
+                              )}
+                              {h.lastSuccessAt && (
+                                <div>Last successful processing: {new Date(h.lastSuccessAt).toLocaleString()}</div>
                               )}
                             </div>
                           </div>
@@ -1095,6 +1161,9 @@ function App() {
                       <div className="panel">
                         <div className="panel-header">
                           <h2>Score Distribution</h2>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                            Min {tool.minScorePercentage}% · Max {tool.maxScorePercentage}%
+                          </span>
                         </div>
                         <div className="dimension-list">
                           <div className="dimension-row">
@@ -1211,6 +1280,9 @@ function App() {
                           <div className="panel">
                             <div className="panel-header">
                               <h2>Organization Monitoring</h2>
+                              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                {orgBreakdown.organizations.length} active organizations
+                              </span>
                             </div>
                             {orgBreakdown.organizations.length === 0 ? (
                               <div className="trend-chart-empty">No organization data yet.</div>
@@ -1261,6 +1333,21 @@ function App() {
                               <div className="trend-chart-empty">No user data yet.</div>
                             ) : (
                               <div className="table-container">
+                                {(() => {
+                                  const newUsers = userBreakdown.users.filter(u => u.attempts === 1).length;
+                                  const returningUsers = userBreakdown.users.filter(u => u.attempts > 1).length;
+                                  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+                                  const activeUsers = userBreakdown.users.filter(u => u.lastActivity && new Date(u.lastActivity).getTime() >= thirtyDaysAgo).length;
+                                  const avgUserScore = Math.round(userBreakdown.users.reduce((sum, u) => sum + u.averageScore, 0) / userBreakdown.users.length);
+                                  return (
+                                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                                      <span>New: <strong>{newUsers}</strong></span>
+                                      <span>Returning: <strong>{returningUsers}</strong></span>
+                                      <span>Active (30d): <strong>{activeUsers}</strong></span>
+                                      <span>Avg score across users: <strong>{avgUserScore}</strong></span>
+                                    </div>
+                                  );
+                                })()}
                                 <table className="custom-table">
                                   <thead>
                                     <tr>
@@ -1290,12 +1377,59 @@ function App() {
                       </div>
                     )}
 
+                    {/* System Health, scoped to this tool (doc section 17) */}
+                    {healthData && healthData[analyticsTool] && (
+                      <div className="panel">
+                        <div className="panel-header">
+                          <h2><HeartPulse size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />System Health</h2>
+                        </div>
+                        {(() => {
+                          const h = healthData[analyticsTool];
+                          return (
+                            <div className="health-grid">
+                              <div className="health-card">
+                                <div className="health-card-header">
+                                  <span>Assessment Service</span>
+                                  <span className={`health-status-pill ${h.status}`}>{h.status}</span>
+                                </div>
+                                <div className="health-card-meta">
+                                  {h.calls > 0 ? (
+                                    <>{h.avgLatencyMs}ms avg · {h.errorRate}% error rate · {h.errors} failed requests ({h.calls} calls)</>
+                                  ) : (
+                                    <>No live query attempts yet</>
+                                  )}
+                                  {h.lastSuccessAt && <div>Last successful processing: {new Date(h.lastSuccessAt).toLocaleString()}</div>}
+                                  {h.lastErrorAt && <div>Last error: {new Date(h.lastErrorAt).toLocaleString()} — {h.lastError}</div>}
+                                </div>
+                              </div>
+                              {reportsSummary && (
+                                <div className="health-card">
+                                  <div className="health-card-header">
+                                    <span>Report Service</span>
+                                    <span className={`health-status-pill ${reportsSummary.successRate >= 95 ? 'healthy' : reportsSummary.successRate >= 80 ? 'warning' : 'critical'}`}>
+                                      {reportsSummary.successRate >= 95 ? 'healthy' : reportsSummary.successRate >= 80 ? 'warning' : 'critical'}
+                                    </span>
+                                  </div>
+                                  <div className="health-card-meta">
+                                    {(reportsSummary.byTool[analyticsTool]?.generated) || 0} generated ·{' '}
+                                    {(reportsSummary.byTool[analyticsTool]?.failed) || 0} failed
+                                    {reportsSummary.avgGenerationTimeMs !== null && <> · {reportsSummary.avgGenerationTimeMs}ms avg</>}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
                     {/* Live Activity + Attention Required, scoped (doc sections 6, 15) */}
                     <div className="split-grid">
                       <div className="panel">
                         <div className="panel-header">
                           <h2>Live Activity</h2>
                         </div>
+                        <TodaySnapshot activityData={activityData} />
                         {activityData.length === 0 ? (
                           <div className="trend-chart-empty">No recent activity.</div>
                         ) : (

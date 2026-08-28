@@ -275,6 +275,8 @@ function computeToolStats(candidates) {
       totalTestTakers: 0,
       averageScorePercentage: 0,
       medianScorePercentage: 0,
+      minScorePercentage: 0,
+      maxScorePercentage: 0,
       scoreDistribution: { low: 0, medium: 0, high: 0 },
       lastActivity: null
     };
@@ -312,6 +314,8 @@ function computeToolStats(candidates) {
     totalTestTakers: totalCount,
     averageScorePercentage: avgScore,
     medianScorePercentage: medianScore,
+    minScorePercentage: Math.round(Math.min(...pcts)),
+    maxScorePercentage: Math.round(Math.max(...pcts)),
     scoreDistribution,
     lastActivity
   };
@@ -1061,6 +1065,14 @@ app.get('/api/alerts', async (req, res) => {
         const failRate = Math.round((failed / toolReports.length) * 100);
         if (failRate >= 10) {
           alerts.push({ tool: name, dbId, severity: 'critical', message: `PDF report generation failing ${failRate}% of the time` });
+        }
+
+        const timedReports = toolReports.filter(r => r.status === 'success' && typeof r.durationMs === 'number');
+        if (timedReports.length >= 5) {
+          const avgMs = Math.round(timedReports.reduce((sum, r) => sum + r.durationMs, 0) / timedReports.length);
+          if (avgMs > 3000) {
+            alerts.push({ tool: name, dbId, severity: 'warning', message: `Report generation delay — averaging ${(avgMs / 1000).toFixed(1)}s` });
+          }
         }
       }
     }
