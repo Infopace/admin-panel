@@ -1119,49 +1119,34 @@ function App() {
                         <div className="panel-header">
                           <h2>Payment Monitoring</h2>
                         </div>
-                        {paymentData.type === 'binary' ? (
-                          <div className="stats-grid" style={{ marginBottom: 0 }}>
-                            <div className="stat-card">
-                              <div>
-                                <span className="stat-label">Paid</span>
-                                <div className="stat-value">{paymentData.paidCount}</div>
-                                <span className="stat-desc">{paymentData.paymentRate}% conversion</span>
-                              </div>
+                        <div className="stats-grid" style={{ marginBottom: 0 }}>
+                          <div className="stat-card">
+                            <div>
+                              <span className="stat-label">Paid</span>
+                              <div className="stat-value">{paymentData.paidCount}</div>
+                              <span className="stat-desc">{paymentData.paymentRate}% conversion</span>
                             </div>
-                            <div className="stat-card">
-                              <div>
-                                <span className="stat-label">Unpaid</span>
-                                <div className="stat-value">{paymentData.unpaidCount}</div>
-                                <span className="stat-desc">Not yet converted</span>
-                              </div>
-                            </div>
-                            {paymentData.hasRevenueAmount && (
-                              <div className="stat-card">
-                                <div>
-                                  <span className="stat-label">Total Revenue</span>
-                                  <div className="stat-value">₹{paymentData.totalRevenue.toLocaleString()}</div>
-                                  <span className="stat-desc">From paid records</span>
-                                </div>
-                              </div>
-                            )}
                           </div>
-                        ) : (
-                          <div className="dimension-list">
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                              Raw payment_status values — not mapped to paid/unpaid since the enum meaning isn't confirmed yet.
+                          <div className="stat-card">
+                            <div>
+                              <span className="stat-label">Unpaid</span>
+                              <div className="stat-value">{paymentData.unpaidCount}</div>
+                              <span className="stat-desc">Not yet converted</span>
                             </div>
-                            {paymentData.statuses.map(s => (
-                              <div className="dimension-row" key={s.status}>
-                                <span className="dimension-label">{s.status}</span>
-                                <div className="dimension-track">
-                                  <div
-                                    className="dimension-fill"
-                                    style={{ width: `${Math.round((s.count / paymentData.statuses.reduce((sum, x) => sum + x.count, 0)) * 100)}%` }}
-                                  />
-                                </div>
-                                <span className="dimension-value">{s.count}</span>
+                          </div>
+                          {paymentData.hasRevenueAmount && (
+                            <div className="stat-card">
+                              <div>
+                                <span className="stat-label">Total Revenue</span>
+                                <div className="stat-value">₹{paymentData.totalRevenue.toLocaleString()}</div>
+                                <span className="stat-desc">From paid records</span>
                               </div>
-                            ))}
+                            </div>
+                          )}
+                        </div>
+                        {paymentData.unpaidBreakdown && paymentData.unpaidBreakdown.length > 0 && (
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '1rem' }}>
+                            Unpaid breakdown: {paymentData.unpaidBreakdown.map(b => `${b.count} ${b.status}`).join(' · ')}
                           </div>
                         )}
                       </div>

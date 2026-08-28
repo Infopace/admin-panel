@@ -201,35 +201,57 @@ async function getOrgBreakdown(supabase) {
 }
 
 /**
- * Payment Monitoring. Verified via schema audit: research_submissions
- * has a payment_status column, but its enum values weren't confirmed
- * against live data (no sample rows), so this reports a raw
- * value-by-count breakdown rather than assuming which values mean
- * "paid" — a wrong paid/unpaid split here would misreport revenue.
+ * Payment Monitoring. Verified via schema audit + a live values check
+ * (check-payment-status.js): payment_status only ever holds "success",
+ * "pending", or "dismissed" — no dollar amount column, so paid/unpaid
+ * counts and conversion rate only, same as db4. "pending" and
+ * "dismissed" are both non-conversions but kept distinct in
+ * unpaidBreakdown since one is still open and the other was declined.
  */
-async function getPaymentStatusBreakdown(supabase) {
+async function getPaymentSummary(supabase) {
   const { data, error } = await supabase
     .from(TABLES.SUBMISSIONS)
     .select('payment_status');
 
   if (error) throw error;
 
-  const counts = {};
+  let paidCount = 0;
+  let unpaidCount = 0;
+  const unpaidBreakdown = {};
+
   data.forEach(row => {
-    const key = row.payment_status || 'Unknown';
-    counts[key] = (counts[key] || 0) + 1;
+    if (row.payment_status === 'success') {
+      paidCount++;
+    } else {
+      unpaidCount++;
+      const key = row.payment_status || 'unknown';
+      unpaidBreakdown[key] = (unpaidBreakdown[key] || 0) + 1;
+    }
   });
 
-  return Object.entries(counts)
-    .map(([status, count]) => ({ status, count }))
-    .sort((a, b) => b.count - a.count);
+  const total = paidCount + unpaidCount;
+  return {
+    hasRevenueAmount: false,
+    paidCount,
+    unpaidCount,
+    paymentRate: total > 0 ? Math.round((paidCount / total) * 100) : 0,
+    unpaidBreakdown: Object.entries(unpaidBreakdown)
+      .map(([status, count]) => ({ status, count }))
+      .sort((a, b) => b.count - a.count)
+  };
 }
 
-function getMockPaymentStatusBreakdown() {
-  return [
-    { status: 'paid', count: 2 },
-    { status: 'pending', count: 1 }
-  ];
+function getMockPaymentSummary() {
+  return {
+    hasRevenueAmount: false,
+    paidCount: 1,
+    unpaidCount: 2,
+    paymentRate: 33,
+    unpaidBreakdown: [
+      { status: 'pending', count: 1 },
+      { status: 'dismissed', count: 1 }
+    ]
+  };
 }
 
 module.exports = {
@@ -238,8 +260,8 @@ module.exports = {
   getMockCandidates,
   getMockCandidateDetails,
   getOrgBreakdown,
-  getPaymentStatusBreakdown,
-  getMockPaymentStatusBreakdown,
+  getPaymentSummary,
+  getMockPaymentSummary,
   metadata: {
     name: 'Market Research',
     description: 'Analyzes the total addressable market (TAM), competitor landscape, pricing strategies, and growth drivers for candidate businesses.'
