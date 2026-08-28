@@ -986,10 +986,14 @@ function App() {
                   <div className="panel-header">
                     <h2><HeartPulse size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />System Health</h2>
                     {reportsSummary && (
-                      <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
                         <span><FileCheck2 size={13} style={{ verticalAlign: '-2px' }} /> {reportsSummary.totalGenerated} reports generated</span>
                         <span>{reportsSummary.totalFailed} failed</span>
+                        <span>{reportsSummary.totalRegenerated} regenerated</span>
                         <span>{reportsSummary.successRate}% success rate</span>
+                        {reportsSummary.avgGenerationTimeMs !== null && (
+                          <span>{reportsSummary.avgGenerationTimeMs}ms avg generation time</span>
+                        )}
                       </div>
                     )}
                   </div>

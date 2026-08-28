@@ -558,6 +558,7 @@ app.get('/api/assessments/:dbId/candidates/:candidateId', async (req, res) => {
 // Generate PDF Report for a Candidate
 app.get('/api/assessments/:dbId/candidates/:candidateId/pdf', async (req, res) => {
   const { dbId, candidateId } = req.params;
+  const pdfStartTime = Date.now();
   const adapter = ADAPTERS[dbId];
   if (!adapter) {
     return res.status(400).json({ error: 'Invalid database identifier.' });
@@ -589,7 +590,7 @@ app.get('/api/assessments/:dbId/candidates/:candidateId/pdf', async (req, res) =
           res.setHeader('Content-Type', 'application/pdf');
           res.setHeader('Content-Disposition', `attachment; filename=${personalInfo.name.replace(/\s+/g, '_')}_Result.pdf`);
           res.send(buffer);
-          logReportEvent({ dbId, toolName: adapter.metadata.name, candidateId, candidateName: personalInfo.name, status: 'success', source: 'pregenerated' });
+          logReportEvent({ dbId, toolName: adapter.metadata.name, candidateId, candidateName: personalInfo.name, status: 'success', source: 'pregenerated', durationMs: Date.now() - pdfStartTime });
           return;
         } else {
           console.warn(`Failed to download PDF from URL: ${personalInfo.pdfUrl}, status: ${pdfRes.status}`);
@@ -653,7 +654,7 @@ app.get('/api/assessments/:dbId/candidates/:candidateId/pdf', async (req, res) =
       // Embed the image centered or full-width (width of letter page is 612 pt)
       doc.image(dashboardImageBuffer, 0, 0, { width: 612 });
       doc.end();
-      logReportEvent({ dbId, toolName: adapter.metadata.name, candidateId, candidateName: personalInfo.name, status: 'success', source: 'dashboard-image' });
+      logReportEvent({ dbId, toolName: adapter.metadata.name, candidateId, candidateName: personalInfo.name, status: 'success', source: 'dashboard-image', durationMs: Date.now() - pdfStartTime });
       return;
     }
 
@@ -764,10 +765,10 @@ app.get('/api/assessments/:dbId/candidates/:candidateId/pdf', async (req, res) =
     }
 
     doc.end();
-    logReportEvent({ dbId, toolName: adapter.metadata.name, candidateId, candidateName: personalInfo.name, status: 'success', source: 'generated' });
+    logReportEvent({ dbId, toolName: adapter.metadata.name, candidateId, candidateName: personalInfo.name, status: 'success', source: 'generated', durationMs: Date.now() - pdfStartTime });
   } catch (error) {
     console.error(error);
-    logReportEvent({ dbId, toolName: adapter.metadata.name, candidateId, candidateName: details?.personalInfo?.name || null, status: 'failed', error: error.message });
+    logReportEvent({ dbId, toolName: adapter.metadata.name, candidateId, candidateName: details?.personalInfo?.name || null, status: 'failed', error: error.message, durationMs: Date.now() - pdfStartTime });
     res.status(500).json({ error: error.message });
   }
 });
@@ -929,22 +930,37 @@ app.get('/api/reports/summary', (req, res) => {
   const byTool = {};
   let totalGenerated = 0;
   let totalFailed = 0;
+  let durationSum = 0;
+  let durationCount = 0;
+  const generatedCandidateCounts = {};
 
   for (const r of reports) {
     if (!byTool[r.dbId]) byTool[r.dbId] = { generated: 0, failed: 0 };
     if (r.status === 'success') {
       totalGenerated++;
       byTool[r.dbId].generated++;
+      if (typeof r.durationMs === 'number') {
+        durationSum += r.durationMs;
+        durationCount++;
+      }
+      // Same candidate + tool generated more than once = a regeneration.
+      const key = `${r.dbId}:${r.candidateId}`;
+      generatedCandidateCounts[key] = (generatedCandidateCounts[key] || 0) + 1;
     } else {
       totalFailed++;
       byTool[r.dbId].failed++;
     }
   }
 
+  const totalRegenerated = Object.values(generatedCandidateCounts)
+    .reduce((sum, count) => sum + Math.max(count - 1, 0), 0);
+
   const total = totalGenerated + totalFailed;
   res.json({
     totalGenerated,
     totalFailed,
+    totalRegenerated,
+    avgGenerationTimeMs: durationCount > 0 ? Math.round(durationSum / durationCount) : null,
     successRate: total > 0 ? Math.round((totalGenerated / total) * 100) : 100,
     byTool,
     recent: reports.slice(-20).reverse()
