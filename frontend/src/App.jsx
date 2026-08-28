@@ -21,7 +21,8 @@ import {
   Minus,
   FileCheck2,
   AlertTriangle,
-  HeartPulse
+  HeartPulse,
+  BarChart3
 } from 'lucide-react';
 
 const API_BASE = 'http://localhost:5000/api';
@@ -125,13 +126,17 @@ function App() {
   const [authSuccess, setAuthSuccess] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
-  // Navigation State: 'overview', 'db1'-'db5', 'settings'
+  // Navigation State: 'overview', 'analytics', 'db1'-'db5', 'settings'
   const [currentView, setCurrentView] = useState('overview');
   const [dbStatuses, setDbStatuses] = useState(null);
   const [overviewData, setOverviewData] = useState([]);
   const [summaryData, setSummaryData] = useState(null);
 
-  // Phase 1: Usage trend, live activity, alerts, system health, reports
+  // Analytics page: 'all' or a specific dbId to drill into
+  const [analyticsTool, setAnalyticsTool] = useState('all');
+
+  // Usage trend, live activity, alerts, system health, reports — all
+  // live on the Analytics page now
   const [trendRange, setTrendRange] = useState('7d');
   const [trendSeries, setTrendSeries] = useState([]);
   const [trendLoading, setTrendLoading] = useState(false);
@@ -253,39 +258,25 @@ function App() {
     }
   };
 
-  // 1. Initial Load: Fetch API Status and Overview
+  // 1. Initial Load: Fetch API Status and Overview (used by sidebar nav
+  // and the Overview landing page)
   const loadInitialData = async () => {
     if (!token) return;
     setLoading(true);
     setBackendError(false);
     try {
-      // Fetch statuses
       const statusRes = await authFetch(`${API_BASE}/status`);
       if (!statusRes.ok) throw new Error('API server error');
       const statusData = await statusRes.json();
       setDbStatuses(statusData);
 
-      // Fetch overview data
       const overviewRes = await authFetch(`${API_BASE}/overview`);
       const overviewData = await overviewRes.json();
       setOverviewData(overviewData);
 
-      // Fetch master KPI summary across all tools
       const summaryRes = await authFetch(`${API_BASE}/overview/summary`);
       const summaryData = await summaryRes.json();
       setSummaryData(summaryData);
-
-      // Phase 1: health, alerts, live activity, report monitoring
-      const [healthRes, alertsRes, activityRes, reportsRes] = await Promise.all([
-        authFetch(`${API_BASE}/health`),
-        authFetch(`${API_BASE}/alerts`),
-        authFetch(`${API_BASE}/activity?limit=15`),
-        authFetch(`${API_BASE}/reports/summary`)
-      ]);
-      setHealthData(await healthRes.json());
-      setAlertsData((await alertsRes.json()).alerts || []);
-      setActivityData((await activityRes.json()).events || []);
-      setReportsSummary(await reportsRes.json());
     } catch (err) {
       console.error('Error connecting to backend:', err);
       if (!err.message.includes('Session expired')) {
@@ -302,13 +293,36 @@ function App() {
     }
   }, [token]);
 
-  // Fetch usage trend data whenever the token is ready or the selected range changes.
+  // Analytics — cross-tool signals (health, alerts, report monitoring)
+  // fetched once whenever the Analytics page is opened; these aren't
+  // scoped per-tool, the alerts/health panels just filter client-side.
   useEffect(() => {
-    if (!token) return;
+    if (!token || currentView !== 'analytics') return;
+    const fetchAnalyticsCrossTool = async () => {
+      try {
+        const [healthRes, alertsRes, reportsRes] = await Promise.all([
+          authFetch(`${API_BASE}/health`),
+          authFetch(`${API_BASE}/alerts`),
+          authFetch(`${API_BASE}/reports/summary`)
+        ]);
+        setHealthData(await healthRes.json());
+        setAlertsData((await alertsRes.json()).alerts || []);
+        setReportsSummary(await reportsRes.json());
+      } catch (err) {
+        console.error('Error fetching analytics cross-tool data:', err);
+      }
+    };
+    fetchAnalyticsCrossTool();
+  }, [token, currentView]);
+
+  // Analytics — usage trend, scoped to the selected tool (or all tools).
+  useEffect(() => {
+    if (!token || currentView !== 'analytics') return;
     const fetchTrend = async () => {
       setTrendLoading(true);
       try {
-        const res = await authFetch(`${API_BASE}/overview/trend?range=${trendRange}`);
+        const dbParam = analyticsTool !== 'all' ? `&dbId=${analyticsTool}` : '';
+        const res = await authFetch(`${API_BASE}/overview/trend?range=${trendRange}${dbParam}`);
         const data = await res.json();
         setTrendSeries(data.series || []);
       } catch (err) {
@@ -318,9 +332,52 @@ function App() {
       }
     };
     fetchTrend();
-  }, [token, trendRange]);
+  }, [token, currentView, trendRange, analyticsTool]);
 
-  // 2. Fetch candidates when switching assessment views
+  // Analytics — live activity feed, scoped to the selected tool.
+  useEffect(() => {
+    if (!token || currentView !== 'analytics') return;
+    const fetchActivity = async () => {
+      try {
+        const dbParam = analyticsTool !== 'all' ? `&dbId=${analyticsTool}` : '';
+        const res = await authFetch(`${API_BASE}/activity?limit=15${dbParam}`);
+        const data = await res.json();
+        setActivityData(data.events || []);
+      } catch (err) {
+        console.error('Error fetching activity:', err);
+      }
+    };
+    fetchActivity();
+  }, [token, currentView, analyticsTool]);
+
+  // Analytics — dimensions / organization / user breakdowns for the
+  // selected tool (only meaningful once a specific tool is picked).
+  useEffect(() => {
+    if (!token || currentView !== 'analytics') return;
+    if (analyticsTool === 'all') {
+      setOrgBreakdown({ supported: false, organizations: [] });
+      setUserBreakdown({ supported: false, totalUniqueUsers: 0, averageAttemptsPerUser: 0, users: [] });
+      setDimensionData({ supported: false, dimensions: [] });
+      return;
+    }
+    const fetchBreakdowns = async () => {
+      try {
+        const [orgRes, userRes, dimRes] = await Promise.all([
+          authFetch(`${API_BASE}/assessments/${analyticsTool}/organizations`),
+          authFetch(`${API_BASE}/assessments/${analyticsTool}/users`),
+          authFetch(`${API_BASE}/assessments/${analyticsTool}/dimensions`)
+        ]);
+        setOrgBreakdown(await orgRes.json());
+        setUserBreakdown(await userRes.json());
+        setDimensionData(await dimRes.json());
+      } catch (err) {
+        console.error('Error fetching org/user/dimension breakdowns:', err);
+      }
+    };
+    fetchBreakdowns();
+  }, [token, currentView, analyticsTool]);
+
+  // 2. Fetch candidates when switching to a tool's candidate-management view
   useEffect(() => {
     if (token && currentView.startsWith('db')) {
       const fetchCandidates = async () => {
@@ -337,30 +394,10 @@ function App() {
           setLoading(false);
         }
       };
-      const fetchBreakdowns = async () => {
-        try {
-          const [orgRes, userRes, dimRes] = await Promise.all([
-            authFetch(`${API_BASE}/assessments/${currentView}/organizations`),
-            authFetch(`${API_BASE}/assessments/${currentView}/users`),
-            authFetch(`${API_BASE}/assessments/${currentView}/dimensions`)
-          ]);
-          setOrgBreakdown(await orgRes.json());
-          setUserBreakdown(await userRes.json());
-          setDimensionData(await dimRes.json());
-        } catch (err) {
-          console.error('Error fetching org/user/dimension breakdowns:', err);
-        }
-      };
       fetchCandidates();
-      fetchBreakdowns();
       setSelectedCandidate(null);
       setCandidateDetails(null);
       setSearchQuery('');
-      // Reset immediately so switching from a tool that supports these
-      // panels to one that doesn't isn't left showing stale data.
-      setOrgBreakdown({ supported: false, organizations: [] });
-      setUserBreakdown({ supported: false, totalUniqueUsers: 0, averageAttemptsPerUser: 0, users: [] });
-      setDimensionData({ supported: false, dimensions: [] });
     }
   }, [currentView, token]);
 
@@ -606,6 +643,14 @@ function App() {
             </li>
             <li className="menu-item">
               <div
+                className={`menu-link ${currentView === 'analytics' ? 'active' : ''}`}
+                onClick={() => setCurrentView('analytics')}
+              >
+                <BarChart3 size={18} /> Analytics
+              </div>
+            </li>
+            <li className="menu-item">
+              <div
                 className={`menu-link ${currentView === 'settings' ? 'active' : ''}`}
                 onClick={() => setCurrentView('settings')}
               >
@@ -653,17 +698,22 @@ function App() {
       {/* MAIN VIEW */}
       <main className="main-content">
 
-        {/* VIEW: OVERVIEW */}
+        {/* VIEW: OVERVIEW — lightweight landing page; deep monitoring lives on Analytics */}
         {currentView === 'overview' && (
           <div>
             <div className="header-container">
               <div className="title-area">
                 <h1>Overview Portal</h1>
-                <p>Aggregated statistics across all 5 databases.</p>
+                <p>Quick summary across all 5 databases — see Analytics for full monitoring.</p>
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={loadInitialData}>
-                <RefreshCw size={14} /> Refresh Data
-              </button>
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button className="btn btn-secondary btn-sm" onClick={loadInitialData}>
+                  <RefreshCw size={14} /> Refresh Data
+                </button>
+                <button className="btn btn-primary btn-sm" onClick={() => setCurrentView('analytics')}>
+                  <BarChart3 size={14} /> Open Analytics
+                </button>
+              </div>
             </div>
 
             {loading ? (
@@ -672,8 +722,66 @@ function App() {
                 Loading aggregated stats...
               </div>
             ) : (
+              <div className="stats-grid">
+                {overviewData.map((item, idx) => (
+                  <div
+                    className={`stat-card db${idx + 1}`}
+                    key={item.id}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setCurrentView(item.id)}
+                  >
+                    <div>
+                      <span className="stat-label">{item.name}</span>
+                      <div className="stat-value">{item.totalTestTakers}</div>
+                      <span className="stat-desc">Candidates — click to manage</span>
+                    </div>
+                    <div className="stat-icon">
+                      <Award size={20} color={`var(--accent-${idx === 0 ? 'primary' : idx === 1 ? 'secondary' : idx === 2 ? 'success' : idx === 3 ? 'warning' : 'danger'})`} />
+                    </div>
+                    <div style={{ position: 'absolute', bottom: 10, right: 15 }}>
+                      <span className={`score-badge ${getScoreClass(item.averageScorePercentage, 100)}`} style={{ fontSize: '0.7rem' }}>
+                        Avg: {item.averageScorePercentage}%
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* VIEW: ANALYTICS — full monitoring dashboard, doc sections 1-15.
+            "All Tools" tab = master dashboard; a specific tool tab = the
+            same framework dynamically populated for that one tool. */}
+        {currentView === 'analytics' && (
+          <div>
+            <div className="header-container">
+              <div className="title-area">
+                <h1>Analytics</h1>
+                <p>Usage, performance, and health monitoring across every assessment tool.</p>
+              </div>
+              <div className="range-tabs" style={{ flexWrap: 'wrap' }}>
+                <button
+                  className={`range-tab ${analyticsTool === 'all' ? 'active' : ''}`}
+                  onClick={() => setAnalyticsTool('all')}
+                >
+                  All Tools
+                </button>
+                {overviewData.map(item => (
+                  <button
+                    key={item.id}
+                    className={`range-tab ${analyticsTool === item.id ? 'active' : ''}`}
+                    onClick={() => setAnalyticsTool(item.id)}
+                  >
+                    {item.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {analyticsTool === 'all' ? (
               <>
-                {/* Master KPI Cards (aggregated across all tools) */}
+                {/* Master KPI Cards (doc section 1) */}
                 {summaryData && (
                   <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
                     <div className="stat-card">
@@ -699,6 +807,13 @@ function App() {
                     </div>
                     <div className="stat-card">
                       <div>
+                        <span className="stat-label">Reports Generated</span>
+                        <div className="stat-value">{reportsSummary ? reportsSummary.totalGenerated : '—'}</div>
+                        <span className="stat-desc">{reportsSummary ? `${reportsSummary.successRate}% success rate` : 'Loading...'}</span>
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <div>
                         <span className="stat-label">Last Activity</span>
                         <div className="stat-value" style={{ fontSize: '1.1rem' }}>
                           {summaryData.lastActivity ? new Date(summaryData.lastActivity).toLocaleString() : 'No activity yet'}
@@ -709,7 +824,7 @@ function App() {
                   </div>
                 )}
 
-                {/* Usage Activity Trend */}
+                {/* Usage Activity Trend (doc section 3) */}
                 <div className="panel">
                   <div className="panel-header">
                     <h2>Assessment Activity Trend</h2>
@@ -732,29 +847,8 @@ function App() {
                   )}
                 </div>
 
-                {/* Per-Tool Stats Cards */}
-                <div className="stats-grid">
-                  {overviewData.map((item, idx) => (
-                    <div className={`stat-card db${idx + 1}`} key={item.id}>
-                      <div>
-                        <span className="stat-label">{item.name}</span>
-                        <div className="stat-value">{item.totalTestTakers}</div>
-                        <span className="stat-desc">Candidates</span>
-                      </div>
-                      <div className="stat-icon">
-                        <Award size={20} color={`var(--accent-${idx === 0 ? 'primary' : idx === 1 ? 'secondary' : idx === 2 ? 'success' : idx === 3 ? 'warning' : 'danger'})`} />
-                      </div>
-                      <div style={{ position: 'absolute', bottom: 10, right: 15 }}>
-                        <span className={`score-badge ${getScoreClass(item.averageScorePercentage, 100)}`} style={{ fontSize: '0.7rem' }}>
-                          Avg: {item.averageScorePercentage}%
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Database Connection Summary */}
-                <h2 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '1rem' }}>Assessment Source Feeds</h2>
+                {/* Tool-wise Monitoring (doc section 2) */}
+                <h2 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '1rem' }}>Tool-wise Monitoring</h2>
                 <div className="table-section">
                   <div className="table-container">
                     <table className="custom-table">
@@ -773,7 +867,7 @@ function App() {
                       </thead>
                       <tbody>
                         {overviewData.map(item => (
-                          <tr key={item.id} onClick={() => setCurrentView(item.id)}>
+                          <tr key={item.id} onClick={() => setAnalyticsTool(item.id)}>
                             <td>
                               <div style={{ fontWeight: '600' }}>{item.name}</div>
                               <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{item.description}</div>
@@ -805,7 +899,7 @@ function App() {
                               </div>
                             </td>
                             <td>
-                              <button className="btn btn-secondary btn-sm">Explore</button>
+                              <button className="btn btn-secondary btn-sm">View Details</button>
                             </td>
                           </tr>
                         ))}
@@ -814,7 +908,7 @@ function App() {
                   </div>
                 </div>
 
-                {/* Live Activity + Attention Required */}
+                {/* Live Activity + Attention Required (doc sections 6, 15) */}
                 <div className="split-grid">
                   <div className="panel">
                     <div className="panel-header">
@@ -862,7 +956,7 @@ function App() {
                   </div>
                 </div>
 
-                {/* System / Health Monitoring */}
+                {/* System / Health Monitoring (doc section 14) */}
                 <div className="panel">
                   <div className="panel-header">
                     <h2><HeartPulse size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />System Health</h2>
@@ -898,6 +992,256 @@ function App() {
                   )}
                 </div>
               </>
+            ) : (
+              (() => {
+                const tool = overviewData.find(i => i.id === analyticsTool);
+                const toolAlerts = alertsData.filter(a => a.dbId === analyticsTool);
+                return (
+                  <>
+                    {/* Particular Tool — Detailed Monitoring (doc section 5) */}
+                    {tool && (
+                      <div className="tool-status-header">
+                        <div>
+                          <h2>{tool.name}</h2>
+                          <div className="tool-status-meta">
+                            <span className={`status-dot ${tool.mode === 'live' ? 'online' : 'offline'}`}></span>
+                            {tool.mode === 'live' ? 'Active / Live' : 'Active / Mock'}
+                            <span style={{ margin: '0 0.5rem' }}>·</span>
+                            Last activity {tool.lastActivity ? new Date(tool.lastActivity).toLocaleString() : 'N/A'}
+                          </div>
+                        </div>
+                        <div className="tool-status-stats">
+                          <div>
+                            <span className="tool-status-value">{tool.totalTestTakers}</span>
+                            <span className="tool-status-label">Attempts</span>
+                          </div>
+                          <div>
+                            <span className="tool-status-value">{tool.averageScorePercentage}%</span>
+                            <span className="tool-status-label">Avg Score</span>
+                          </div>
+                          <div>
+                            <span className="tool-status-value">{tool.medianScorePercentage}%</span>
+                            <span className="tool-status-label">Median Score</span>
+                          </div>
+                          <div>
+                            <TrendIndicator trend={tool.trend} />
+                            <span className="tool-status-label">7-Day Trend</span>
+                          </div>
+                        </div>
+                        <button className="btn btn-primary btn-sm" onClick={() => setCurrentView(analyticsTool)}>
+                          Manage Candidates
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Score Monitoring (doc section 9) */}
+                    {tool && (
+                      <div className="panel">
+                        <div className="panel-header">
+                          <h2>Score Distribution</h2>
+                        </div>
+                        <div className="dimension-list">
+                          <div className="dimension-row">
+                            <span className="dimension-label">Low</span>
+                            <div className="dimension-track">
+                              <div className="dimension-fill" style={{ width: `${tool.scoreDistribution.low}%`, background: 'var(--accent-danger)' }} />
+                            </div>
+                            <span className="dimension-value">{tool.scoreDistribution.low}%</span>
+                          </div>
+                          <div className="dimension-row">
+                            <span className="dimension-label">Medium</span>
+                            <div className="dimension-track">
+                              <div className="dimension-fill" style={{ width: `${tool.scoreDistribution.medium}%`, background: 'var(--accent-warning)' }} />
+                            </div>
+                            <span className="dimension-value">{tool.scoreDistribution.medium}%</span>
+                          </div>
+                          <div className="dimension-row">
+                            <span className="dimension-label">High</span>
+                            <div className="dimension-track">
+                              <div className="dimension-fill" style={{ width: `${tool.scoreDistribution.high}%`, background: 'var(--accent-success)' }} />
+                            </div>
+                            <span className="dimension-value">{tool.scoreDistribution.high}%</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Tool Usage Monitor, scoped (doc section 3) */}
+                    <div className="panel">
+                      <div className="panel-header">
+                        <h2>Activity Trend</h2>
+                        <div className="range-tabs">
+                          {TREND_RANGES.map(r => (
+                            <button
+                              key={r.key}
+                              className={`range-tab ${trendRange === r.key ? 'active' : ''}`}
+                              onClick={() => setTrendRange(r.key)}
+                            >
+                              {r.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {trendLoading ? (
+                        <div className="trend-chart-empty">Loading trend...</div>
+                      ) : (
+                        <TrendChart series={trendSeries} />
+                      )}
+                    </div>
+
+                    {/* Tool-Specific Dimensions (doc section 10) */}
+                    {dimensionData.supported && dimensionData.dimensions.length > 0 && (
+                      <div className="panel">
+                        <div className="panel-header">
+                          <h2>Tool Dimensions</h2>
+                        </div>
+                        <div className="dimension-list">
+                          {dimensionData.dimensions.map(dim => (
+                            <div className="dimension-row" key={dim.key}>
+                              <span className="dimension-label">{dim.label}</span>
+                              <div className="dimension-track">
+                                <div className="dimension-fill" style={{ width: `${dim.average ?? 0}%` }} />
+                              </div>
+                              <span className="dimension-value">{dim.average !== null ? `${dim.average}%` : 'N/A'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Organization + User Monitoring (doc sections 11, 12) */}
+                    {(orgBreakdown.supported || userBreakdown.supported) && (
+                      <div className="split-grid">
+                        {orgBreakdown.supported && (
+                          <div className="panel">
+                            <div className="panel-header">
+                              <h2>Organization Monitoring</h2>
+                            </div>
+                            {orgBreakdown.organizations.length === 0 ? (
+                              <div className="trend-chart-empty">No organization data yet.</div>
+                            ) : (
+                              <div className="table-container">
+                                <table className="custom-table">
+                                  <thead>
+                                    <tr>
+                                      <th>Organization</th>
+                                      <th>Assessments</th>
+                                      <th>Avg Score</th>
+                                      <th>Last Activity</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {orgBreakdown.organizations.slice(0, 10).map(org => (
+                                      <tr key={org.organization}>
+                                        <td>{org.organization}</td>
+                                        <td>{org.totalAssessments}</td>
+                                        <td>{org.averageScore}</td>
+                                        <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                          {org.lastActivity ? new Date(org.lastActivity).toLocaleDateString() : 'N/A'}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {userBreakdown.supported && (
+                          <div className="panel">
+                            <div className="panel-header">
+                              <h2>User Monitoring</h2>
+                              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                {userBreakdown.totalUniqueUsers} unique · {userBreakdown.averageAttemptsPerUser} avg attempts/user
+                              </span>
+                            </div>
+                            {userBreakdown.users.length === 0 ? (
+                              <div className="trend-chart-empty">No user data yet.</div>
+                            ) : (
+                              <div className="table-container">
+                                <table className="custom-table">
+                                  <thead>
+                                    <tr>
+                                      <th>User</th>
+                                      <th>Attempts</th>
+                                      <th>Avg Score</th>
+                                      <th>Last Activity</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {userBreakdown.users.slice(0, 10).map(u => (
+                                      <tr key={u.userId}>
+                                        <td>{u.name}</td>
+                                        <td>{u.attempts}</td>
+                                        <td>{u.averageScore}</td>
+                                        <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                          {u.lastActivity ? new Date(u.lastActivity).toLocaleDateString() : 'N/A'}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Live Activity + Attention Required, scoped (doc sections 6, 15) */}
+                    <div className="split-grid">
+                      <div className="panel">
+                        <div className="panel-header">
+                          <h2>Live Activity</h2>
+                        </div>
+                        {activityData.length === 0 ? (
+                          <div className="trend-chart-empty">No recent activity.</div>
+                        ) : (
+                          <div className="activity-feed">
+                            {activityData.map((event, idx) => (
+                              <div className="activity-item" key={idx}>
+                                <span className={`activity-dot ${event.type}`}></span>
+                                <span className="activity-text">
+                                  {event.type === 'assessment_completed' && (
+                                    <><strong>{event.candidateName}</strong> completed {event.tool}</>
+                                  )}
+                                  {event.type === 'report_generated' && (
+                                    <>Report generated for <strong>{event.candidateName}</strong></>
+                                  )}
+                                  {event.type === 'report_failed' && (
+                                    <>Report generation failed for <strong>{event.candidateName}</strong></>
+                                  )}
+                                </span>
+                                <span className="activity-time">{timeAgo(event.timestamp)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="panel">
+                        <div className="panel-header">
+                          <h2><AlertTriangle size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />Attention Required</h2>
+                        </div>
+                        {toolAlerts.length === 0 ? (
+                          <div className="trend-chart-empty">Nothing flagged for this tool.</div>
+                        ) : (
+                          <div className="alerts-list">
+                            {toolAlerts.map((alert, idx) => (
+                              <div className={`alert-item ${alert.severity}`} key={idx}>
+                                <div className="alert-item-body">
+                                  <span>{alert.message}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()
             )}
           </div>
         )}
@@ -914,108 +1258,11 @@ function App() {
                 <span className={`mode-badge ${assessmentMode === 'live' ? 'live' : 'mock'}`}>
                   {assessmentMode} Connection
                 </span>
+                <button className="btn btn-secondary btn-sm" onClick={() => { setAnalyticsTool(currentView); setCurrentView('analytics'); }}>
+                  <BarChart3 size={14} /> View Analytics
+                </button>
               </div>
             </div>
-
-            {/* Tool-Specific Dimensions */}
-            {dimensionData.supported && dimensionData.dimensions.length > 0 && (
-              <div className="panel">
-                <div className="panel-header">
-                  <h2>Tool Dimensions</h2>
-                </div>
-                <div className="dimension-list">
-                  {dimensionData.dimensions.map(dim => (
-                    <div className="dimension-row" key={dim.key}>
-                      <span className="dimension-label">{dim.label}</span>
-                      <div className="dimension-track">
-                        <div className="dimension-fill" style={{ width: `${dim.average ?? 0}%` }} />
-                      </div>
-                      <span className="dimension-value">{dim.average !== null ? `${dim.average}%` : 'N/A'}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Organization + User Monitoring */}
-            {(orgBreakdown.supported || userBreakdown.supported) && (
-              <div className="split-grid">
-                {orgBreakdown.supported && (
-                  <div className="panel">
-                    <div className="panel-header">
-                      <h2>Organization Monitoring</h2>
-                    </div>
-                    {orgBreakdown.organizations.length === 0 ? (
-                      <div className="trend-chart-empty">No organization data yet.</div>
-                    ) : (
-                      <div className="table-container">
-                        <table className="custom-table">
-                          <thead>
-                            <tr>
-                              <th>Organization</th>
-                              <th>Assessments</th>
-                              <th>Avg Score</th>
-                              <th>Last Activity</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {orgBreakdown.organizations.slice(0, 10).map(org => (
-                              <tr key={org.organization}>
-                                <td>{org.organization}</td>
-                                <td>{org.totalAssessments}</td>
-                                <td>{org.averageScore}</td>
-                                <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                                  {org.lastActivity ? new Date(org.lastActivity).toLocaleDateString() : 'N/A'}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {userBreakdown.supported && (
-                  <div className="panel">
-                    <div className="panel-header">
-                      <h2>User Monitoring</h2>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                        {userBreakdown.totalUniqueUsers} unique · {userBreakdown.averageAttemptsPerUser} avg attempts/user
-                      </span>
-                    </div>
-                    {userBreakdown.users.length === 0 ? (
-                      <div className="trend-chart-empty">No user data yet.</div>
-                    ) : (
-                      <div className="table-container">
-                        <table className="custom-table">
-                          <thead>
-                            <tr>
-                              <th>User</th>
-                              <th>Attempts</th>
-                              <th>Avg Score</th>
-                              <th>Last Activity</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {userBreakdown.users.slice(0, 10).map(u => (
-                              <tr key={u.userId}>
-                                <td>{u.name}</td>
-                                <td>{u.attempts}</td>
-                                <td>{u.averageScore}</td>
-                                <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                                  {u.lastActivity ? new Date(u.lastActivity).toLocaleDateString() : 'N/A'}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
 
             {loading ? (
               <div style={{ padding: '4rem', textAlign: 'center', color: '#94a3b8' }}>

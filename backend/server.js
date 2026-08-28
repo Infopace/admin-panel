@@ -976,13 +976,16 @@ app.get('/api/alerts', async (req, res) => {
 // Live Activity (doc section 6) — approximated by polling: merges the
 // most recent completed candidates across tools with this backend's
 // report log, sorted newest first. Not push-based, but no schema
-// change needed.
+// change needed. Optional ?dbId= scopes it to one tool, for the
+// Analytics per-tool drill-down.
 app.get('/api/activity', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+    const dbIdFilter = req.query.dbId;
+    const dbIds = dbIdFilter && ADAPTERS[dbIdFilter] ? [dbIdFilter] : ['db1', 'db2', 'db3', 'db4', 'db5'];
     const events = [];
 
-    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
+    for (const dbId of dbIds) {
       const { adapter, candidates } = await fetchCandidatesForTool(dbId);
       for (const c of candidates) {
         if (!c.testDate) continue;
@@ -990,7 +993,8 @@ app.get('/api/activity', async (req, res) => {
       }
     }
 
-    for (const r of readReports()) {
+    const reports = dbIdFilter ? readReports().filter(r => r.dbId === dbIdFilter) : readReports();
+    for (const r of reports) {
       events.push({
         type: r.status === 'success' ? 'report_generated' : 'report_failed',
         tool: r.toolName,
