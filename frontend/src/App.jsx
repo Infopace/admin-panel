@@ -159,7 +159,7 @@ function TrendChart({ series, toolNames }) {
                   <div className="trend-bar-tooltip-header">
                     {formatShortDate(point.date)} — {point.completed} total
                   </div>
-                  {byToolEntries.length > 1 ? (
+                  {byToolEntries.length > 0 ? (
                     <ul className="trend-bar-tooltip-list">
                       {byToolEntries.map(([dbId, count]) => (
                         <li key={dbId}>
@@ -168,9 +168,9 @@ function TrendChart({ series, toolNames }) {
                         </li>
                       ))}
                     </ul>
-                  ) : point.completed === 0 ? (
+                  ) : (
                     <div className="trend-bar-tooltip-empty">No activity</div>
-                  ) : null}
+                  )}
                 </div>
               )}
             </div>
