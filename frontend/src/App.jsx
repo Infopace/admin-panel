@@ -113,8 +113,11 @@ function formatShortDate(dateStr) {
 // Minimal dependency-free bar chart for the usage trend panel. Built with
 // flexbox columns (not raw SVG scaling) so bars stay proportioned and a
 // baseline + date labels make it read as a chart even when only one or
-// two days have activity.
-function TrendChart({ series }) {
+// two days have activity. Hovering or clicking a bar shows a per-tool
+// breakdown for that day (toolNames maps dbId -> display name).
+function TrendChart({ series, toolNames }) {
+  const [activeIndex, setActiveIndex] = useState(null);
+
   if (!series || series.length === 0) {
     return <div className="trend-chart-empty">No activity data for this range.</div>;
   }
@@ -131,18 +134,48 @@ function TrendChart({ series }) {
   return (
     <div className="trend-chart">
       <div className="trend-chart-bars">
-        {series.map(point => (
-          <div className="trend-bar-col" key={point.date}>
-            {point.completed > 0 && (
-              <span className="trend-bar-value">{point.completed}</span>
-            )}
+        {series.map((point, i) => {
+          const byToolEntries = point.byTool
+            ? Object.entries(point.byTool).sort((a, b) => b[1] - a[1])
+            : [];
+          return (
             <div
-              className="trend-bar"
-              style={{ height: point.completed > 0 ? `${Math.max((point.completed / maxVal) * 100, 4)}%` : '0%' }}
-              title={`${formatShortDate(point.date)}: ${point.completed} completed`}
-            />
-          </div>
-        ))}
+              className="trend-bar-col"
+              key={point.date}
+              style={{ position: 'relative' }}
+              onMouseEnter={() => setActiveIndex(i)}
+              onMouseLeave={() => setActiveIndex(prev => (prev === i ? null : prev))}
+              onClick={() => setActiveIndex(prev => (prev === i ? null : i))}
+            >
+              {point.completed > 0 && (
+                <span className="trend-bar-value">{point.completed}</span>
+              )}
+              <div
+                className="trend-bar"
+                style={{ height: point.completed > 0 ? `${Math.max((point.completed / maxVal) * 100, 4)}%` : '0%' }}
+              />
+              {activeIndex === i && (
+                <div className="trend-bar-tooltip">
+                  <div className="trend-bar-tooltip-header">
+                    {formatShortDate(point.date)} — {point.completed} total
+                  </div>
+                  {byToolEntries.length > 1 ? (
+                    <ul className="trend-bar-tooltip-list">
+                      {byToolEntries.map(([dbId, count]) => (
+                        <li key={dbId}>
+                          <span>{(toolNames && toolNames[dbId]) || dbId}</span>
+                          <strong>{count}</strong>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : point.completed === 0 ? (
+                    <div className="trend-bar-tooltip-empty">No activity</div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
       <div className="trend-chart-axis">
         {series.map((point, i) => {
@@ -552,6 +585,9 @@ function App() {
     c.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // dbId -> display name, for the trend chart's per-tool tooltip breakdown
+  const toolNames = Object.fromEntries(overviewData.map(t => [t.id, t.name]));
+
   // Helper score range styling class
   const getScoreClass = (score, max) => {
     const pct = (score / max) * 100;
@@ -922,7 +958,7 @@ function App() {
                   {trendLoading ? (
                     <div className="trend-chart-empty">Loading trend...</div>
                   ) : (
-                    <TrendChart series={trendSeries} />
+                    <TrendChart series={trendSeries} toolNames={toolNames} />
                   )}
                 </div>
 
@@ -1227,7 +1263,7 @@ function App() {
                       {trendLoading ? (
                         <div className="trend-chart-empty">Loading trend...</div>
                       ) : (
-                        <TrendChart series={trendSeries} />
+                        <TrendChart series={trendSeries} toolNames={toolNames} />
                       )}
                     </div>
 

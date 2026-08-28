@@ -1039,7 +1039,7 @@ app.get('/api/overview/trend', async (req, res) => {
       d.setUTCDate(d.getUTCDate() - i);
       const key = d.toISOString().slice(0, 10);
       dayKeys.push(key);
-      buckets[key] = 0;
+      buckets[key] = { total: 0, byTool: {} };
     }
 
     for (const dbId of dbIds) {
@@ -1047,11 +1047,17 @@ app.get('/api/overview/trend', async (req, res) => {
       for (const c of candidates) {
         if (!c.testDate) continue;
         const key = new Date(c.testDate).toISOString().slice(0, 10);
-        if (key in buckets) buckets[key]++;
+        if (key in buckets) {
+          buckets[key].total++;
+          buckets[key].byTool[dbId] = (buckets[key].byTool[dbId] || 0) + 1;
+        }
       }
     }
 
-    res.json({ range, series: dayKeys.map(key => ({ date: key, completed: buckets[key] })) });
+    res.json({
+      range,
+      series: dayKeys.map(key => ({ date: key, completed: buckets[key].total, byTool: buckets[key].byTool }))
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
