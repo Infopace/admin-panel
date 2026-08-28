@@ -15,6 +15,7 @@ Short, crisp log of what got built each day. Newest entry on top.
 - Added Payment Monitoring (revenue for Creative & Innovation, paid/unpaid conversion for Market Research and Market Potential); confirmed Market Research's real payment_status values and upgraded it from a raw breakdown to a proper conversion metric
 - Added a low payment-conversion alert
 - Closed remaining doc gaps: Tool Category label, per-tool Error Rate + Reports columns in the monitoring table, Most/Least Active Organization highlight, cross-tool Organizations/Users/Reports summary row
+- Added Report Generation Time (avg) and Reports Regenerated count
 - Started `daily_updates.md`
 
-**Still open:** Completion Funnel and Time Monitoring (blocked — no session-status or start-timestamp data in any of the 5 databases); the 4 additional psychometric tools (waiting on credentials).
+**Still open — genuinely blocked, not just unbuilt:** Completion Funnel and Time Monitoring (no session-status or start-timestamp column exists in any of the 5 databases — needs the source apps to add instrumentation); In Progress/Abandoned counts and Active Users/Organizations at the master KPI level (same root cause); the 4 additional psychometric tools (waiting on credentials). None of these can be built without new data or new access — they're not on the to-do list, they're on the blocked list.
