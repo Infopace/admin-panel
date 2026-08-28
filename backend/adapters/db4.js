@@ -234,12 +234,50 @@ async function getOrgBreakdown(supabase) {
   })).sort((a, b) => b.totalAssessments - a.totalAssessments);
 }
 
+/**
+ * Payment Monitoring. Verified via schema audit: submissions has a
+ * "paid" flag but no amount column, so this reports paid/unpaid counts
+ * and conversion rate only — no revenue figure (unlike db1, which has
+ * payment_amount).
+ */
+function isPaidValue(v) {
+  return v === true || v === 'true' || v === 1 || v === '1';
+}
+
+async function getPaymentSummary(supabase) {
+  const { data, error } = await supabase
+    .from(TABLES.SUBMISSIONS)
+    .select('paid');
+
+  if (error) throw error;
+
+  let paidCount = 0;
+  let unpaidCount = 0;
+  data.forEach(row => {
+    isPaidValue(row.paid) ? paidCount++ : unpaidCount++;
+  });
+
+  const total = paidCount + unpaidCount;
+  return {
+    hasRevenueAmount: false,
+    paidCount,
+    unpaidCount,
+    paymentRate: total > 0 ? Math.round((paidCount / total) * 100) : 0
+  };
+}
+
+function getMockPaymentSummary() {
+  return { hasRevenueAmount: false, paidCount: 2, unpaidCount: 1, paymentRate: 67 };
+}
+
 module.exports = {
   getCandidates,
   getCandidateDetails,
   getMockCandidates,
   getMockCandidateDetails,
   getOrgBreakdown,
+  getPaymentSummary,
+  getMockPaymentSummary,
   metadata: {
     name: 'Market Potential',
     description: 'Evaluates startup submissions on market sizing (TAM/SAM/SOM), product-market fit, risk profiles, and business model feasibility.'

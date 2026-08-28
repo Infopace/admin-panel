@@ -155,6 +155,7 @@ function App() {
   const [orgBreakdown, setOrgBreakdown] = useState({ supported: false, organizations: [] });
   const [userBreakdown, setUserBreakdown] = useState({ supported: false, totalUniqueUsers: 0, averageAttemptsPerUser: 0, users: [] });
   const [dimensionData, setDimensionData] = useState({ supported: false, dimensions: [] });
+  const [paymentData, setPaymentData] = useState({ supported: false });
 
   // Selected Candidate Drawer State
   const [selectedCandidate, setSelectedCandidate] = useState(null);
@@ -350,28 +351,31 @@ function App() {
     fetchActivity();
   }, [token, currentView, analyticsTool]);
 
-  // Analytics — dimensions / organization / user breakdowns for the
-  // selected tool (only meaningful once a specific tool is picked).
+  // Analytics — dimensions / organization / user / payment breakdowns
+  // for the selected tool (only meaningful once a specific tool is picked).
   useEffect(() => {
     if (!token || currentView !== 'analytics') return;
     if (analyticsTool === 'all') {
       setOrgBreakdown({ supported: false, organizations: [] });
       setUserBreakdown({ supported: false, totalUniqueUsers: 0, averageAttemptsPerUser: 0, users: [] });
       setDimensionData({ supported: false, dimensions: [] });
+      setPaymentData({ supported: false });
       return;
     }
     const fetchBreakdowns = async () => {
       try {
-        const [orgRes, userRes, dimRes] = await Promise.all([
+        const [orgRes, userRes, dimRes, paymentRes] = await Promise.all([
           authFetch(`${API_BASE}/assessments/${analyticsTool}/organizations`),
           authFetch(`${API_BASE}/assessments/${analyticsTool}/users`),
-          authFetch(`${API_BASE}/assessments/${analyticsTool}/dimensions`)
+          authFetch(`${API_BASE}/assessments/${analyticsTool}/dimensions`),
+          authFetch(`${API_BASE}/assessments/${analyticsTool}/payments`)
         ]);
         setOrgBreakdown(await orgRes.json());
         setUserBreakdown(await userRes.json());
         setDimensionData(await dimRes.json());
+        setPaymentData(await paymentRes.json());
       } catch (err) {
-        console.error('Error fetching org/user/dimension breakdowns:', err);
+        console.error('Error fetching org/user/dimension/payment breakdowns:', err);
       }
     };
     fetchBreakdowns();
@@ -1106,6 +1110,60 @@ function App() {
                             </div>
                           ))}
                         </div>
+                      </div>
+                    )}
+
+                    {/* Payment Monitoring — not in the original doc, added on request */}
+                    {paymentData.supported && (
+                      <div className="panel">
+                        <div className="panel-header">
+                          <h2>Payment Monitoring</h2>
+                        </div>
+                        {paymentData.type === 'binary' ? (
+                          <div className="stats-grid" style={{ marginBottom: 0 }}>
+                            <div className="stat-card">
+                              <div>
+                                <span className="stat-label">Paid</span>
+                                <div className="stat-value">{paymentData.paidCount}</div>
+                                <span className="stat-desc">{paymentData.paymentRate}% conversion</span>
+                              </div>
+                            </div>
+                            <div className="stat-card">
+                              <div>
+                                <span className="stat-label">Unpaid</span>
+                                <div className="stat-value">{paymentData.unpaidCount}</div>
+                                <span className="stat-desc">Not yet converted</span>
+                              </div>
+                            </div>
+                            {paymentData.hasRevenueAmount && (
+                              <div className="stat-card">
+                                <div>
+                                  <span className="stat-label">Total Revenue</span>
+                                  <div className="stat-value">₹{paymentData.totalRevenue.toLocaleString()}</div>
+                                  <span className="stat-desc">From paid records</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="dimension-list">
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                              Raw payment_status values — not mapped to paid/unpaid since the enum meaning isn't confirmed yet.
+                            </div>
+                            {paymentData.statuses.map(s => (
+                              <div className="dimension-row" key={s.status}>
+                                <span className="dimension-label">{s.status}</span>
+                                <div className="dimension-track">
+                                  <div
+                                    className="dimension-fill"
+                                    style={{ width: `${Math.round((s.count / paymentData.statuses.reduce((sum, x) => sum + x.count, 0)) * 100)}%` }}
+                                  />
+                                </div>
+                                <span className="dimension-value">{s.count}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
 

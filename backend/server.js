@@ -729,6 +729,47 @@ app.get('/api/assessments/:dbId/candidates/:candidateId/pdf', async (req, res) =
   }
 });
 
+// Payment Monitoring — user-requested addition, outside the original
+// DASHBOARD.docx scope. Two response shapes depending on what each
+// tool's schema actually supports: 'binary' (paid/unpaid counts, plus
+// revenue where a dollar amount column exists) or 'breakdown' (raw
+// status-value counts, used when the enum's meaning isn't confirmed).
+app.get('/api/assessments/:dbId/payments', async (req, res) => {
+  const { dbId } = req.params;
+  const adapter = ADAPTERS[dbId];
+  if (!adapter) {
+    return res.status(400).json({ error: 'Invalid database identifier.' });
+  }
+
+  const client = getSupabaseClient(dbId);
+
+  if (typeof adapter.getPaymentSummary === 'function') {
+    if (!client) {
+      return res.json({ supported: true, type: 'binary', mode: 'mock', ...adapter.getMockPaymentSummary() });
+    }
+    try {
+      const summary = await adapter.getPaymentSummary(client);
+      return res.json({ supported: true, type: 'binary', mode: 'live', ...summary });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
+  if (typeof adapter.getPaymentStatusBreakdown === 'function') {
+    if (!client) {
+      return res.json({ supported: true, type: 'breakdown', mode: 'mock', statuses: adapter.getMockPaymentStatusBreakdown() });
+    }
+    try {
+      const statuses = await adapter.getPaymentStatusBreakdown(client);
+      return res.json({ supported: true, type: 'breakdown', mode: 'live', statuses });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
+  return res.status(200).json({ supported: false });
+});
+
 // Tool-Specific Dimensions (doc section 10) — only implemented where the
 // schema audit confirmed real per-dimension score columns (currently db1).
 app.get('/api/assessments/:dbId/dimensions', async (req, res) => {

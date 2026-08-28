@@ -483,6 +483,50 @@ function getMockDimensionAverages() {
 }
 
 /**
+ * Payment Monitoring. Verified via schema audit: cii_results has paid,
+ * payment_id, payment_amount — a boolean-ish flag plus a real dollar
+ * amount, so this can report actual revenue (not just a paid/unpaid
+ * count like db4, or an ambiguous status string like db3).
+ */
+function isPaidValue(v) {
+  return v === true || v === 'true' || v === 1 || v === '1';
+}
+
+async function getPaymentSummary(supabase) {
+  const { data, error } = await supabase
+    .from(TABLES.RESULTS)
+    .select('paid, payment_amount');
+
+  if (error) throw error;
+
+  let paidCount = 0;
+  let unpaidCount = 0;
+  let totalRevenue = 0;
+
+  data.forEach(row => {
+    if (isPaidValue(row.paid)) {
+      paidCount++;
+      totalRevenue += Number(row.payment_amount) || 0;
+    } else {
+      unpaidCount++;
+    }
+  });
+
+  const total = paidCount + unpaidCount;
+  return {
+    hasRevenueAmount: true,
+    paidCount,
+    unpaidCount,
+    paymentRate: total > 0 ? Math.round((paidCount / total) * 100) : 0,
+    totalRevenue
+  };
+}
+
+function getMockPaymentSummary() {
+  return { hasRevenueAmount: true, paidCount: 3, unpaidCount: 0, paymentRate: 100, totalRevenue: 8970 };
+}
+
+/**
  * Organization + user monitoring (Phase 5).
  * Verified via schema audit: cii_results has org_id, department, and
  * user_id alongside cii_score — so both breakdowns are real here.
@@ -566,6 +610,8 @@ module.exports = {
   getUserBreakdown,
   getDimensionAverages,
   getMockDimensionAverages,
+  getPaymentSummary,
+  getMockPaymentSummary,
   metadata: {
     name: 'Creative and Innovation',
     description: 'Measures divergent thinking, creative problem-solving capability, and organizational innovation style.'

@@ -200,12 +200,46 @@ async function getOrgBreakdown(supabase) {
   })).sort((a, b) => b.totalAssessments - a.totalAssessments);
 }
 
+/**
+ * Payment Monitoring. Verified via schema audit: research_submissions
+ * has a payment_status column, but its enum values weren't confirmed
+ * against live data (no sample rows), so this reports a raw
+ * value-by-count breakdown rather than assuming which values mean
+ * "paid" — a wrong paid/unpaid split here would misreport revenue.
+ */
+async function getPaymentStatusBreakdown(supabase) {
+  const { data, error } = await supabase
+    .from(TABLES.SUBMISSIONS)
+    .select('payment_status');
+
+  if (error) throw error;
+
+  const counts = {};
+  data.forEach(row => {
+    const key = row.payment_status || 'Unknown';
+    counts[key] = (counts[key] || 0) + 1;
+  });
+
+  return Object.entries(counts)
+    .map(([status, count]) => ({ status, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+function getMockPaymentStatusBreakdown() {
+  return [
+    { status: 'paid', count: 2 },
+    { status: 'pending', count: 1 }
+  ];
+}
+
 module.exports = {
   getCandidates,
   getCandidateDetails,
   getMockCandidates,
   getMockCandidateDetails,
   getOrgBreakdown,
+  getPaymentStatusBreakdown,
+  getMockPaymentStatusBreakdown,
   metadata: {
     name: 'Market Research',
     description: 'Analyzes the total addressable market (TAM), competitor landscape, pricing strategies, and growth drivers for candidate businesses.'
