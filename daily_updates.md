@@ -22,5 +22,6 @@ Short, crisp log of what got built each day. Newest entry on top.
 - Added real Tool Availability checks — pings each tool's actual public site (URLs provided by the user), separate from the existing DB-query health, after Market Potential's site showed suspended while its database kept responding fine. Needs verification on a machine with normal internet access — this sandbox can't reach external domains to confirm live results
 - Added `npm run dev` (backend auto-restart on file change) so `git pull` + edits don't need a manual server restart
 - Trend chart bars now show a per-tool breakdown on hover/click instead of just the combined daily total
+- Fixed the breakdown being hidden on single-tool days (it only showed when 2+ tools contributed) — every bar now names its tool(s)
 
 **Still open — genuinely blocked, not just unbuilt:** Completion Funnel and Time Monitoring (no session-status or start-timestamp column exists in any of the 5 databases — needs the source apps to add instrumentation); In Progress/Abandoned counts and true Completion Rate (same root cause — "completed" and "total attempts" are currently the same number); Active Sessions (no session-tracking data); the 4 additional psychometric tools (waiting on credentials). None of these can be built without new data or new access — they're not on the to-do list, they're on the blocked list.
