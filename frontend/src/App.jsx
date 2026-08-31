@@ -873,9 +873,9 @@ function App() {
                   <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
                     <div className="stat-card">
                       <div>
-                        <span className="stat-label">Total Assessments</span>
+                        <span className="stat-label">Total / Completed Assessments</span>
                         <div className="stat-value">{summaryData.totalAssessments}</div>
-                        <span className="stat-desc">Across all tools</span>
+                        <span className="stat-desc" title="In-progress and abandoned attempts aren't tracked by any source database yet, so this number covers both doc metrics">Across all tools — completed only</span>
                       </div>
                     </div>
                     <div className="stat-card">
@@ -903,7 +903,7 @@ function App() {
                       <div>
                         <span className="stat-label">Reports Pending</span>
                         <div className="stat-value">0</div>
-                        <span className="stat-desc">Generated synchronously — never queued</span>
+                        <span className="stat-desc" title="Not a tracked metric — always reads 0 because there is no queue to be pending in">Always 0 — reports generate synchronously, no queue exists</span>
                       </div>
                     </div>
                     <div className="stat-card">
@@ -924,7 +924,7 @@ function App() {
                       <div>
                         <span className="stat-label">Failed Requests</span>
                         <div className="stat-value">{healthData ? Object.values(healthData).reduce((sum, h) => sum + h.errors, 0) : '—'}</div>
-                        <span className="stat-desc">Live query errors since server start</span>
+                        <span className="stat-desc" title="This is database query errors, not assessment processing failures — no source app reports the latter yet">DB query errors since server start</span>
                       </div>
                     </div>
                     <div className="stat-card">
