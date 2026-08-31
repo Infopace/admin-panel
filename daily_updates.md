@@ -6,6 +6,7 @@ Short, crisp log of what got built each day. Newest entry on top.
 
 ## 2026-08-31
 
+- Enhanced the candidate-management table (per-tool "Browsing and managing database answers" view): colored initials avatar per candidate (TOOL_PALETTE, cycling per row), merged Email+Phone into one compact two-line Contact cell (was two separate columns), and replaced the bulky two-line "42% (Review Required)" status badge with a single-line pill ("42% Review" / "Fair" / "Passed" by score band) — same compact-table treatment already applied to Tool-wise Monitoring
 - Reverted the "click category → jump into Analytics" behavior — that was never asked for. Sidebar categories are now a proper accordion instead: collapsed by default showing just the category name + chevron, click to expand in place (no navigation) and reveal the tool names nested underneath, click one of those to go straight to its candidate-management page like before
 - Fixed a spacing bug: `.table-section` (Tool-wise Monitoring) had `margin-top` but no `margin-bottom`, so it sat flush against the Live Activity/Attention Required panels directly below it with zero gap — added the missing margin
 - Extended KPI_GRADIENTS from 5 to 9 distinct colors and stopped the Master KPI row (9 cards) from cycling through only 5 — "Total/Completed Assessments" and "Active Users" were both landing on the same indigo gradient and sitting directly on top of each other (card 1, card 6, same 5-column grid). Overview's 5-card row and Payment Monitoring's 2-3 cards were already fine since they never exceeded 5 distinct indices

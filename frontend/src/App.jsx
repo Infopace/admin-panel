@@ -2045,58 +2045,56 @@ function App() {
                 </div>
 
                 <div className="table-container">
-                  <table className="custom-table">
+                  <table className="custom-table custom-table-compact">
                     <thead>
                       <tr>
-                        <th>Candidate Name</th>
-                        <th>Email Address</th>
-                        <th>Phone Number</th>
-                        <th>Submission Date</th>
-                        <th>Assessment Score</th>
+                        <th>Candidate</th>
+                        <th>Contact</th>
+                        <th>Submitted</th>
+                        <th>Score</th>
                         <th>Status</th>
-                        <th>Actions</th>
+                        <th></th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredCandidates.length === 0 ? (
                         <tr>
-                          <td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                          <td colSpan="6" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                             No candidates found matching filter criteria.
                           </td>
                         </tr>
                       ) : (
-                        filteredCandidates.map(c => {
+                        filteredCandidates.map((c, idx) => {
                           const scorePct = Math.round((c.score / c.maxScore) * 100);
+                          const scoreClass = getScoreClass(c.score, c.maxScore);
+                          const initials = c.name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
                           return (
                             <tr key={c.id} onClick={() => handleSelectCandidate(c)}>
                               <td>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600' }}>
-                                  <User size={16} color="var(--accent-primary)" /> {c.name}
+                                <div className="table-tool-cell">
+                                  <span className="candidate-avatar" style={{ background: TOOL_PALETTE[idx % TOOL_PALETTE.length] }}>
+                                    {initials}
+                                  </span>
+                                  <span style={{ fontWeight: '600' }}>{c.name}</span>
                                 </div>
                               </td>
-                              <td>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)' }}>
-                                  <Mail size={14} /> {c.email}
+                              <td style={{ whiteSpace: 'normal' }}>
+                                <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Mail size={13} /> {c.email}</div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.2rem' }}><Phone size={13} /> {c.phone || 'N/A'}</div>
                                 </div>
                               </td>
-                              <td>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)' }}>
-                                  <Phone size={14} /> {c.phone || 'N/A'}
-                                </div>
-                              </td>
-                              <td>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)' }}>
+                              <td style={{ color: 'var(--text-secondary)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                                   <Calendar size={14} /> {new Date(c.testDate).toLocaleDateString()}
                                 </div>
                               </td>
-                              <td>
-                                <div style={{ fontWeight: '700' }}>
-                                  {c.score} / {c.maxScore}
-                                </div>
+                              <td style={{ fontWeight: '700' }}>
+                                {c.score} / {c.maxScore}
                               </td>
                               <td>
-                                <span className={`score-badge ${getScoreClass(c.score, c.maxScore)}`}>
-                                  {scorePct}% ({scorePct >= 60 ? 'Passed' : 'Review Required'})
+                                <span className={`score-badge ${scoreClass}`}>
+                                  {scorePct}% {scoreClass === 'high' ? 'Passed' : scoreClass === 'medium' ? 'Fair' : 'Review'}
                                 </span>
                               </td>
                               <td>
