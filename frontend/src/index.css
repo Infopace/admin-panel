@@ -512,6 +512,50 @@ body {
   background-color: var(--bg-surface-hover);
 }
 
+/* Compact variant (Tool-wise Monitoring) — single-line rows, no wrapped
+   paragraph text eating vertical space */
+.custom-table-compact th,
+.custom-table-compact td {
+  padding: 0.85rem 1.1rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.table-tool-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  white-space: normal;
+}
+
+.table-tool-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.table-tool-category {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.mini-score-bar {
+  display: flex;
+  width: 90px;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background-color: var(--bg-surface-hover);
+}
+
+.mini-score-bar span {
+  height: 100%;
+}
+
 /* Score Pills */
 .score-badge {
   display: inline-flex;

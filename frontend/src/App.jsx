@@ -447,6 +447,22 @@ function ToolShareDonut({ tools }) {
 // 5 bars. Still low-to-high ordered, just less "warning siren."
 const SCORE_BAND_COLORS = { low: '#fb923c', medium: '#a78bfa', high: '#22d3ee' };
 
+// Compact inline stacked bar for table cells — same 3-color language as
+// the Score Composition chart, just small enough to sit in a table row
+// instead of three separate L/M/H badges eating horizontal space.
+function MiniScoreBar({ distribution }) {
+  return (
+    <div
+      className="mini-score-bar"
+      title={`Low ${distribution.low}% · Medium ${distribution.medium}% · High ${distribution.high}%`}
+    >
+      <span style={{ width: `${distribution.low}%`, background: SCORE_BAND_COLORS.low }} />
+      <span style={{ width: `${distribution.medium}%`, background: SCORE_BAND_COLORS.medium }} />
+      <span style={{ width: `${distribution.high}%`, background: SCORE_BAND_COLORS.high }} />
+    </div>
+  );
+}
+
 function ScoreDistributionStackedChart({ tools }) {
   if (!tools || tools.length === 0) return null;
   const data = tools.map(t => ({
@@ -1480,49 +1496,48 @@ function App() {
                 <h2 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '1rem' }}><PanelIconBadge icon={BarChart3} color={CHART_COLORS.secondary} />Tool-wise Monitoring</h2>
                 <div className="table-section">
                   <div className="table-container">
-                    <table className="custom-table">
+                    <table className="custom-table custom-table-compact">
                       <thead>
                         <tr>
-                          <th>Assessment Name</th>
-                          <th>Category</th>
-                          <th>Data Source Mode</th>
-                          <th>Active Records</th>
-                          <th>Avg / Median Score</th>
-                          <th>Score Distribution</th>
+                          <th>Assessment</th>
+                          <th>Mode</th>
+                          <th>Records</th>
+                          <th>Avg / Median</th>
+                          <th>Score Mix</th>
                           <th>Reports</th>
                           <th>Error Rate</th>
                           <th>Last Activity</th>
                           <th>Trend</th>
-                          <th>Status Health</th>
-                          <th>Action</th>
+                          <th>Health</th>
+                          <th></th>
                         </tr>
                       </thead>
                       <tbody>
-                        {overviewData.map(item => {
+                        {overviewData.map((item, idx) => {
                           const toolReports = reportsSummary && reportsSummary.byTool ? reportsSummary.byTool[item.id] : null;
                           const toolHealth = healthData ? healthData[item.id] : null;
                           return (
                             <tr key={item.id} onClick={() => { setAnalyticsCategory(item.category || 'Uncategorized'); setAnalyticsTool(item.id); }}>
                               <td>
-                                <div style={{ fontWeight: '600' }}>{item.name}</div>
-                                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{item.description}</div>
-                              </td>
-                              <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{item.category}</td>
-                              <td>
-                                <span className={`mode-badge ${item.mode === 'live' ? 'live' : 'mock'}`}>
-                                  {item.mode} Mode
-                                </span>
-                              </td>
-                              <td>{item.totalTestTakers} candidates</td>
-                              <td>{item.averageScorePercentage}% / {item.medianScorePercentage}%</td>
-                              <td>
-                                <div style={{ display: 'flex', gap: '0.3rem', fontSize: '0.75rem' }}>
-                                  <span className="score-badge low" title="Low scorers">L {item.scoreDistribution.low}%</span>
-                                  <span className="score-badge medium" title="Medium scorers">M {item.scoreDistribution.medium}%</span>
-                                  <span className="score-badge high" title="High scorers">H {item.scoreDistribution.high}%</span>
+                                <div className="table-tool-cell" title={item.description}>
+                                  <span className="table-tool-icon" style={{ background: TOOL_PALETTE[idx % TOOL_PALETTE.length] }}>
+                                    <Database size={14} color="#ffffff" />
+                                  </span>
+                                  <div>
+                                    <div style={{ fontWeight: '600' }}>{item.name}</div>
+                                    <span className="table-tool-category">{item.category}</span>
+                                  </div>
                                 </div>
                               </td>
-                              <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                              <td>
+                                <span className={`mode-badge ${item.mode === 'live' ? 'live' : 'mock'}`}>
+                                  {item.mode}
+                                </span>
+                              </td>
+                              <td>{item.totalTestTakers}</td>
+                              <td>{item.averageScorePercentage}% / {item.medianScorePercentage}%</td>
+                              <td><MiniScoreBar distribution={item.scoreDistribution} /></td>
+                              <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                                 {toolReports ? `${toolReports.generated} ok / ${toolReports.failed} failed` : '—'}
                               </td>
                               <td style={{ fontSize: '0.8rem' }}>
@@ -1532,20 +1547,20 @@ function App() {
                                   </span>
                                 ) : '—'}
                               </td>
-                              <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                              <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                                 {item.lastActivity ? new Date(item.lastActivity).toLocaleDateString() : 'N/A'}
                               </td>
                               <td>
                                 <TrendIndicator trend={item.trend} />
                               </td>
                               <td>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                  <span className={`status-dot ${item.mode === 'live' ? 'online' : 'offline'}`}></span>
-                                  <span style={{ fontSize: '0.85rem' }}>{item.mode === 'live' ? 'Online/Live' : 'Using Fallback Mock'}</span>
-                                </div>
+                                <span
+                                  className={`status-dot ${item.mode === 'live' ? 'online' : 'offline'}`}
+                                  title={item.mode === 'live' ? 'Online/Live' : 'Using Fallback Mock'}
+                                ></span>
                               </td>
                               <td>
-                                <button className="btn btn-secondary btn-sm">View Details</button>
+                                <button className="btn btn-secondary btn-sm">View</button>
                               </td>
                             </tr>
                           );
