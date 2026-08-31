@@ -22,7 +22,9 @@ import {
   FileCheck2,
   AlertTriangle,
   HeartPulse,
-  BarChart3
+  BarChart3,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -623,6 +625,10 @@ function App() {
   // its own tab. 'all' shows every tool in the dropdown, ungrouped.
   const [analyticsCategory, setAnalyticsCategory] = useState('all');
 
+  // Sidebar category accordion — which category (if any) is expanded to
+  // show its tool names. Purely a sidebar UI toggle, unrelated to Analytics.
+  const [expandedSidebarCategory, setExpandedSidebarCategory] = useState(null);
+
   // Usage trend, live activity, alerts, system health, reports — all
   // live on the Analytics page now
   const [trendRange, setTrendRange] = useState('7d');
@@ -1160,33 +1166,50 @@ function App() {
           </ul>
         </div>
 
-        {/* One entry per category (not per tool) — clicking jumps into
-            Analytics pre-filtered to that category, where the tool
-            dropdown picks a specific one. Categories are derived from
-            each adapter's metadata.category, same as Analytics' own
-            filter, so a new category like "Psychometric" appears here
-            automatically the moment a tool declares it. */}
+        {/* Category accordion — collapsed by default, showing just the
+            category name. Clicking a category toggles it open/closed in
+            place (pure sidebar UI, no navigation); clicking a tool name
+            once expanded navigates to that tool's candidate-management
+            view, same as before. Categories are derived from each
+            adapter's metadata.category, so a new one like "Psychometric"
+            appears here automatically the moment a tool declares it. */}
         <div className="menu-section">
           <div className="menu-title">Tool Categories</div>
           <ul className="menu-list">
-            {Array.from(new Set(overviewData.map(t => t.category || 'Uncategorized'))).map(cat => (
-              <li className="menu-item" key={cat}>
-                <div
-                  className={`menu-link ${currentView === 'analytics' && analyticsCategory === cat ? 'active' : ''}`}
-                  onClick={() => {
-                    setAnalyticsCategory(cat);
-                    const firstInCategory = overviewData.find(t => (t.category || 'Uncategorized') === cat);
-                    if (firstInCategory) setAnalyticsTool(firstInCategory.id);
-                    setCurrentView('analytics');
-                  }}
-                >
-                  <Database size={18} />
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {cat}
-                  </span>
-                </div>
-              </li>
-            ))}
+            {Array.from(new Set(overviewData.map(t => t.category || 'Uncategorized'))).map(cat => {
+              const isOpen = expandedSidebarCategory === cat;
+              const toolsInCategory = overviewData.filter(t => (t.category || 'Uncategorized') === cat);
+              return (
+                <li className="menu-item" key={cat}>
+                  <div
+                    className="menu-link"
+                    onClick={() => setExpandedSidebarCategory(isOpen ? null : cat)}
+                  >
+                    {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {cat}
+                    </span>
+                  </div>
+                  {isOpen && (
+                    <ul className="menu-list menu-list-nested">
+                      {toolsInCategory.map(item => (
+                        <li className="menu-item" key={item.id}>
+                          <div
+                            className={`menu-link menu-link-nested ${currentView === item.id ? 'active' : ''}`}
+                            onClick={() => setCurrentView(item.id)}
+                          >
+                            <Database size={16} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {item.name}
+                            </span>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
 
