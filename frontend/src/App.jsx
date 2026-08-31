@@ -1431,81 +1431,28 @@ function App() {
 
             {analyticsTool === 'all' ? (
               <>
-                {/* Master KPI Cards (doc section 1) */}
+                {/* Master KPI Cards (doc section 1) — same gradient-card
+                    language as Overview, cycling the same 5-hue palette
+                    across 9 cards. Trend badge only where real, same rule
+                    as Overview's KPI row. */}
                 {summaryData && (
-                  <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
-                    <div className="stat-card">
-                      <div>
-                        <span className="stat-label">Total / Completed Assessments</span>
-                        <div className="stat-value">{summaryData.totalAssessments}</div>
-                        <span className="stat-desc" title="In-progress and abandoned attempts aren't tracked by any source database yet, so this number covers both doc metrics">Across all tools — completed only</span>
-                      </div>
-                    </div>
-                    <div className="stat-card">
-                      <div>
-                        <span className="stat-label">Average Score</span>
-                        <div className="stat-value">{summaryData.averageScorePercentage}%</div>
-                        <span className="stat-desc">Weighted across tools</span>
-                      </div>
-                    </div>
-                    <div className="stat-card">
-                      <div>
-                        <span className="stat-label">Live Connections</span>
-                        <div className="stat-value">{summaryData.liveToolsCount} / {summaryData.totalTools}</div>
-                        <span className="stat-desc">{summaryData.mockToolsCount} using mock data</span>
-                      </div>
-                    </div>
-                    <div className="stat-card">
-                      <div>
-                        <span className="stat-label">Reports Generated</span>
-                        <div className="stat-value">{reportsSummary ? reportsSummary.totalGenerated : '—'}</div>
-                        <span className="stat-desc">{reportsSummary ? `${reportsSummary.successRate}% success rate` : 'Loading...'}</span>
-                      </div>
-                    </div>
-                    <div className="stat-card">
-                      <div>
-                        <span className="stat-label">Reports Pending</span>
-                        <div className="stat-value">0</div>
-                        <span className="stat-desc" title="Not a tracked metric — always reads 0 because there is no queue to be pending in">Always 0 — reports generate synchronously, no queue exists</span>
-                      </div>
-                    </div>
-                    <div className="stat-card">
-                      <div>
-                        <span className="stat-label">Active Users</span>
-                        <div className="stat-value">{entitySummary ? entitySummary.totalUsers : '—'}</div>
-                        <span className="stat-desc">Across live-connected tools</span>
-                      </div>
-                    </div>
-                    <div className="stat-card">
-                      <div>
-                        <span className="stat-label">Active Organizations</span>
-                        <div className="stat-value">{entitySummary ? entitySummary.totalOrganizations : '—'}</div>
-                        <span className="stat-desc">Across live-connected tools</span>
-                      </div>
-                    </div>
-                    <div className="stat-card">
-                      <div>
-                        <span className="stat-label">Failed Requests</span>
-                        <div className="stat-value">{healthData ? Object.values(healthData).reduce((sum, h) => sum + h.errors, 0) : '—'}</div>
-                        <span className="stat-desc" title="This is database query errors, not assessment processing failures — no source app reports the latter yet">DB query errors since server start</span>
-                      </div>
-                    </div>
-                    <div className="stat-card">
-                      <div>
-                        <span className="stat-label">Last Activity</span>
-                        <div className="stat-value" style={{ fontSize: '1.1rem' }}>
-                          {summaryData.lastActivity ? new Date(summaryData.lastActivity).toLocaleString() : 'No activity yet'}
-                        </div>
-                        <span className="stat-desc">Most recent across tools</span>
-                      </div>
-                    </div>
+                  <div className="kpi-grid" style={{ marginBottom: '1.5rem' }}>
+                    <KpiCard icon={BarChart3} gradient={KPI_GRADIENTS[0]} label="Total / Completed Assessments" value={summaryData.totalAssessments} sub="Across all tools — completed only" trend={aggregateVolumeTrend(overviewData)} />
+                    <KpiCard icon={Award} gradient={KPI_GRADIENTS[1]} label="Average Score" value={`${summaryData.averageScorePercentage}%`} sub="Weighted across tools" />
+                    <KpiCard icon={Database} gradient={KPI_GRADIENTS[2]} label="Live Connections" value={`${summaryData.liveToolsCount} / ${summaryData.totalTools}`} sub={`${summaryData.mockToolsCount} using mock data`} />
+                    <KpiCard icon={FileCheck2} gradient={KPI_GRADIENTS[3]} label="Reports Generated" value={reportsSummary ? reportsSummary.totalGenerated : '—'} sub={reportsSummary ? `${reportsSummary.successRate}% success rate` : 'Loading...'} />
+                    <KpiCard icon={RefreshCw} gradient={KPI_GRADIENTS[4]} label="Reports Pending" value={0} sub="Always 0 — generated synchronously, no queue exists" />
+                    <KpiCard icon={User} gradient={KPI_GRADIENTS[0]} label="Active Users" value={entitySummary ? entitySummary.totalUsers : '—'} sub="Across live-connected tools" />
+                    <KpiCard icon={BookOpen} gradient={KPI_GRADIENTS[1]} label="Active Organizations" value={entitySummary ? entitySummary.totalOrganizations : '—'} sub="Across live-connected tools" />
+                    <KpiCard icon={AlertCircle} gradient={KPI_GRADIENTS[2]} label="Failed Requests" value={healthData ? Object.values(healthData).reduce((sum, h) => sum + h.errors, 0) : '—'} sub="DB query errors, not assessment failures" />
+                    <KpiCard icon={Calendar} gradient={KPI_GRADIENTS[3]} label="Last Activity" value={<span style={{ fontSize: '1.15rem' }}>{summaryData.lastActivity ? new Date(summaryData.lastActivity).toLocaleString() : 'No activity yet'}</span>} sub="Most recent across tools" />
                   </div>
                 )}
 
                 {/* Usage Activity Trend (doc section 3) */}
                 <div className="panel">
                   <div className="panel-header">
-                    <h2>Assessment Activity Trend</h2>
+                    <h2><PanelIconBadge icon={TrendingUp} color={CHART_COLORS.primary} />Assessment Activity Trend</h2>
                     <div className="range-tabs">
                       {TREND_RANGES.map(r => (
                         <button
@@ -1530,7 +1477,7 @@ function App() {
                 <ToolComparisonCharts tools={overviewData} />
 
                 {/* Tool-wise Monitoring (doc section 2) */}
-                <h2 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '1rem' }}>Tool-wise Monitoring</h2>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '1rem' }}><PanelIconBadge icon={BarChart3} color={CHART_COLORS.secondary} />Tool-wise Monitoring</h2>
                 <div className="table-section">
                   <div className="table-container">
                     <table className="custom-table">
@@ -1612,7 +1559,7 @@ function App() {
                 <div className="split-grid">
                   <div className="panel">
                     <div className="panel-header">
-                      <h2>Live Activity</h2>
+                      <h2><PanelIconBadge icon={RefreshCw} color={CHART_COLORS.secondary} />Live Activity</h2>
                     </div>
                     <TodaySnapshot activityData={activityData} />
                     {activityData.length === 0 ? (
@@ -1642,17 +1589,10 @@ function App() {
 
                   <div className="panel">
                     <div className="panel-header">
-                      <h2><AlertTriangle size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />Attention Required</h2>
+                      <h2><PanelIconBadge icon={AlertTriangle} color={CHART_COLORS.warning} />Attention Required</h2>
                     </div>
                     <div className="alerts-list">
-                      {alertsData.map((alert, idx) => (
-                        <div className={`alert-item ${alert.severity}`} key={idx}>
-                          <div className="alert-item-body">
-                            {alert.tool && <strong>{alert.tool}</strong>}
-                            <span>{alert.message}</span>
-                          </div>
-                        </div>
-                      ))}
+                      {alertsData.map((alert, idx) => <AlertRow alert={alert} key={idx} />)}
                     </div>
                   </div>
                 </div>
@@ -1660,7 +1600,7 @@ function App() {
                 {/* System / Health Monitoring (doc section 14) */}
                 <div className="panel">
                   <div className="panel-header">
-                    <h2><HeartPulse size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />System Health</h2>
+                    <h2><PanelIconBadge icon={HeartPulse} color={CHART_COLORS.success} />System Health</h2>
                     {reportsSummary && (
                       <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
                         <span><FileCheck2 size={13} style={{ verticalAlign: '-2px' }} /> {reportsSummary.totalGenerated} generated / downloaded</span>
@@ -1682,28 +1622,10 @@ function App() {
 
                 {/* Organizations / Users / Reports summary row (doc section 16) */}
                 {entitySummary && (
-                  <div className="stats-grid">
-                    <div className="stat-card">
-                      <div>
-                        <span className="stat-label">Organizations</span>
-                        <div className="stat-value">{entitySummary.totalOrganizations}</div>
-                        <span className="stat-desc">Across live-connected tools</span>
-                      </div>
-                    </div>
-                    <div className="stat-card">
-                      <div>
-                        <span className="stat-label">Users</span>
-                        <div className="stat-value">{entitySummary.totalUsers}</div>
-                        <span className="stat-desc">Across live-connected tools</span>
-                      </div>
-                    </div>
-                    <div className="stat-card">
-                      <div>
-                        <span className="stat-label">Reports</span>
-                        <div className="stat-value">{entitySummary.totalReports}</div>
-                        <span className="stat-desc">Successfully generated</span>
-                      </div>
-                    </div>
+                  <div className="kpi-grid">
+                    <KpiCard icon={BookOpen} gradient={KPI_GRADIENTS[1]} label="Organizations" value={entitySummary.totalOrganizations} sub="Across live-connected tools" />
+                    <KpiCard icon={User} gradient={KPI_GRADIENTS[4]} label="Users" value={entitySummary.totalUsers} sub="Across live-connected tools" />
+                    <KpiCard icon={FileCheck2} gradient={KPI_GRADIENTS[2]} label="Reports" value={entitySummary.totalReports} sub="Successfully generated" />
                   </div>
                 )}
               </>
@@ -1717,7 +1639,7 @@ function App() {
                     {tool && (
                       <div className="tool-status-header">
                         <div>
-                          <h2>{tool.name}</h2>
+                          <h2><PanelIconBadge icon={Database} color={TOOL_PALETTE[Math.max(overviewData.findIndex(t => t.id === analyticsTool), 0) % TOOL_PALETTE.length]} />{tool.name}</h2>
                           <div className="tool-status-meta">
                             <span className={`status-dot ${tool.mode === 'live' ? 'online' : 'offline'}`}></span>
                             {tool.mode === 'live' ? 'Active / Live' : 'Active / Mock'}
@@ -1753,7 +1675,7 @@ function App() {
                     {tool && (
                       <div className="panel">
                         <div className="panel-header">
-                          <h2>Score Distribution</h2>
+                          <h2><PanelIconBadge icon={Award} color={CHART_COLORS.danger} />Score Distribution</h2>
                           <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                             Min {tool.minScorePercentage}% · Max {tool.maxScorePercentage}%
                           </span>
@@ -1765,7 +1687,7 @@ function App() {
                     {/* Tool Usage Monitor, scoped (doc section 3) */}
                     <div className="panel">
                       <div className="panel-header">
-                        <h2>Activity Trend</h2>
+                        <h2><PanelIconBadge icon={TrendingUp} color={CHART_COLORS.primary} />Activity Trend</h2>
                         <div className="range-tabs">
                           {TREND_RANGES.map(r => (
                             <button
@@ -1789,7 +1711,7 @@ function App() {
                     {dimensionData.supported && dimensionData.dimensions.length > 0 && (
                       <div className="panel">
                         <div className="panel-header">
-                          <h2>Tool Dimensions</h2>
+                          <h2><PanelIconBadge icon={BarChart3} color={CHART_COLORS.warning} />Tool Dimensions</h2>
                         </div>
                         <div className="dimension-list">
                           {dimensionData.dimensions.map(dim => (
@@ -1809,31 +1731,13 @@ function App() {
                     {paymentData.supported && (
                       <div className="panel">
                         <div className="panel-header">
-                          <h2>Payment Monitoring</h2>
+                          <h2><PanelIconBadge icon={FileCheck2} color={CHART_COLORS.success} />Payment Monitoring</h2>
                         </div>
-                        <div className="stats-grid" style={{ marginBottom: 0 }}>
-                          <div className="stat-card">
-                            <div>
-                              <span className="stat-label">Paid</span>
-                              <div className="stat-value">{paymentData.paidCount}</div>
-                              <span className="stat-desc">{paymentData.paymentRate}% conversion</span>
-                            </div>
-                          </div>
-                          <div className="stat-card">
-                            <div>
-                              <span className="stat-label">Unpaid</span>
-                              <div className="stat-value">{paymentData.unpaidCount}</div>
-                              <span className="stat-desc">Not yet converted</span>
-                            </div>
-                          </div>
+                        <div className="kpi-grid" style={{ marginBottom: 0 }}>
+                          <KpiCard icon={Check} gradient={KPI_GRADIENTS[2]} label="Paid" value={paymentData.paidCount} sub={`${paymentData.paymentRate}% conversion`} />
+                          <KpiCard icon={AlertCircle} gradient={KPI_GRADIENTS[3]} label="Unpaid" value={paymentData.unpaidCount} sub="Not yet converted" />
                           {paymentData.hasRevenueAmount && (
-                            <div className="stat-card">
-                              <div>
-                                <span className="stat-label">Total Revenue</span>
-                                <div className="stat-value">₹{paymentData.totalRevenue.toLocaleString()}</div>
-                                <span className="stat-desc">From paid records</span>
-                              </div>
-                            </div>
+                            <KpiCard icon={FileCheck2} gradient={KPI_GRADIENTS[0]} label="Total Revenue" value={`₹${paymentData.totalRevenue.toLocaleString()}`} sub="From paid records" />
                           )}
                         </div>
                         {paymentData.unpaidBreakdown && paymentData.unpaidBreakdown.length > 0 && (
@@ -1850,7 +1754,7 @@ function App() {
                         {orgBreakdown.supported && (
                           <div className="panel">
                             <div className="panel-header">
-                              <h2>Organization Monitoring</h2>
+                              <h2><PanelIconBadge icon={BookOpen} color={CHART_COLORS.secondary} />Organization Monitoring</h2>
                               <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                                 {orgBreakdown.organizations.length} active organizations
                               </span>
@@ -1895,7 +1799,7 @@ function App() {
                         {userBreakdown.supported && (
                           <div className="panel">
                             <div className="panel-header">
-                              <h2>User Monitoring</h2>
+                              <h2><PanelIconBadge icon={User} color={CHART_COLORS.primary} />User Monitoring</h2>
                               <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                                 {userBreakdown.totalUniqueUsers} unique · {userBreakdown.averageAttemptsPerUser} avg attempts/user
                               </span>
@@ -1952,7 +1856,7 @@ function App() {
                     {healthData && healthData[analyticsTool] && (
                       <div className="panel">
                         <div className="panel-header">
-                          <h2><HeartPulse size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />System Health</h2>
+                          <h2><PanelIconBadge icon={HeartPulse} color={CHART_COLORS.success} />System Health</h2>
                         </div>
                         {(() => {
                           const h = healthData[analyticsTool];
@@ -2011,7 +1915,7 @@ function App() {
                     <div className="split-grid">
                       <div className="panel">
                         <div className="panel-header">
-                          <h2>Live Activity</h2>
+                          <h2><PanelIconBadge icon={RefreshCw} color={CHART_COLORS.secondary} />Live Activity</h2>
                         </div>
                         <TodaySnapshot activityData={activityData} />
                         {activityData.length === 0 ? (
@@ -2041,19 +1945,13 @@ function App() {
 
                       <div className="panel">
                         <div className="panel-header">
-                          <h2><AlertTriangle size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />Attention Required</h2>
+                          <h2><PanelIconBadge icon={AlertTriangle} color={CHART_COLORS.warning} />Attention Required</h2>
                         </div>
                         {toolAlerts.length === 0 ? (
                           <div className="trend-chart-empty">Nothing flagged for this tool.</div>
                         ) : (
                           <div className="alerts-list">
-                            {toolAlerts.map((alert, idx) => (
-                              <div className={`alert-item ${alert.severity}`} key={idx}>
-                                <div className="alert-item-body">
-                                  <span>{alert.message}</span>
-                                </div>
-                              </div>
-                            ))}
+                            {toolAlerts.map((alert, idx) => <AlertRow alert={alert} key={idx} />)}
                           </div>
                         )}
                       </div>
