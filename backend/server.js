@@ -1023,24 +1023,45 @@ app.get('/api/reports/summary', (req, res) => {
 // status data this dashboard doesn't have yet (see schema audit).
 const RANGE_DAYS = { today: 1, '7d': 7, '30d': 30, '90d': 90 };
 
+const MAX_CUSTOM_RANGE_DAYS = 366;
+
 app.get('/api/overview/trend', async (req, res) => {
   try {
-    const range = RANGE_DAYS[req.query.range] ? req.query.range : '7d';
-    const days = RANGE_DAYS[range];
+    const { startDate: startParam, endDate: endParam } = req.query;
+    let dayKeys = [];
+    let range;
+
+    if (startParam || endParam) {
+      const start = new Date(`${startParam}T00:00:00Z`);
+      const end = new Date(`${endParam}T00:00:00Z`);
+      if (!startParam || !endParam || isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
+        return res.status(400).json({ error: 'Invalid custom date range — provide both startDate and endDate as YYYY-MM-DD, with startDate <= endDate.' });
+      }
+      const spanDays = Math.floor((end - start) / (24 * 60 * 60 * 1000)) + 1;
+      if (spanDays > MAX_CUSTOM_RANGE_DAYS) {
+        return res.status(400).json({ error: `Custom range too large — max ${MAX_CUSTOM_RANGE_DAYS} days.` });
+      }
+      for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+        dayKeys.push(new Date(d).toISOString().slice(0, 10));
+      }
+      range = 'custom';
+    } else {
+      range = RANGE_DAYS[req.query.range] ? req.query.range : '7d';
+      const days = RANGE_DAYS[range];
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(today);
+        d.setUTCDate(d.getUTCDate() - i);
+        dayKeys.push(d.toISOString().slice(0, 10));
+      }
+    }
+
     const dbIdFilter = req.query.dbId;
     const dbIds = dbIdFilter && ADAPTERS[dbIdFilter] ? [dbIdFilter] : ['db1', 'db2', 'db3', 'db4', 'db5'];
 
     const buckets = {};
-    const dayKeys = [];
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(today);
-      d.setUTCDate(d.getUTCDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      dayKeys.push(key);
-      buckets[key] = { total: 0, byTool: {} };
-    }
+    dayKeys.forEach(key => { buckets[key] = { total: 0, byTool: {} }; });
 
     for (const dbId of dbIds) {
       const { candidates } = await fetchCandidatesForTool(dbId);

@@ -62,7 +62,8 @@ const TREND_RANGES = [
   { key: 'today', label: 'Today' },
   { key: '7d', label: '7 Days' },
   { key: '30d', label: '30 Days' },
-  { key: '90d', label: '90 Days' }
+  { key: '90d', label: '90 Days' },
+  { key: 'custom', label: 'Custom' }
 ];
 
 // AI-profile list items (strengths/blindSpots/improvements) are usually
@@ -189,6 +190,49 @@ function TrendTooltip({ active, payload, toolNames }) {
 }
 
 // Usage trend — real area chart (Recharts) with a gradient fill. Thins out
+// Range tabs (Today/7d/30d/90d/Custom) + the two date inputs that appear
+// once "Custom" is selected. One shared component so the picker behaves
+// identically everywhere it's used (Overview, Analytics all-tools,
+// Analytics per-tool) instead of three copies drifting apart.
+function TrendRangeSelector({ trendRange, setTrendRange, customStartDate, setCustomStartDate, customEndDate, setCustomEndDate }) {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+      <div className="range-tabs">
+        {TREND_RANGES.map(r => (
+          <button
+            key={r.key}
+            className={`range-tab ${trendRange === r.key ? 'active' : ''}`}
+            onClick={() => setTrendRange(r.key)}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+      {trendRange === 'custom' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <input
+            type="date"
+            className="tool-select"
+            value={customStartDate}
+            max={customEndDate || todayStr}
+            onChange={(e) => setCustomStartDate(e.target.value)}
+          />
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>to</span>
+          <input
+            type="date"
+            className="tool-select"
+            value={customEndDate}
+            min={customStartDate || undefined}
+            max={todayStr}
+            onChange={(e) => setCustomEndDate(e.target.value)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // X-axis labels on longer ranges so dates don't collide, same rule the old
 // hand-rolled version used (label every ceil(n/9) points, always show the
 // last/most-recent date).
@@ -649,6 +693,14 @@ function App() {
   // Usage trend, live activity, alerts, system health, reports — all
   // live on the Analytics page now
   const [trendRange, setTrendRange] = useState('7d');
+  // Custom trend date range — default to the last 7 days so the picker
+  // isn't blank the moment "Custom" is clicked.
+  const [customStartDate, setCustomStartDate] = useState(() => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 6);
+    return d.toISOString().slice(0, 10);
+  });
+  const [customEndDate, setCustomEndDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [trendSeries, setTrendSeries] = useState([]);
   const [trendLoading, setTrendLoading] = useState(false);
   const [activityData, setActivityData] = useState([]);
@@ -831,15 +883,21 @@ function App() {
   }, [token, currentView]);
 
   // Usage trend — scoped to the selected tool on Analytics, always
-  // company-wide on the Overview dashboard.
+  // company-wide on the Overview dashboard. "Custom" sends explicit
+  // startDate/endDate instead of a range key; waits for both dates to be
+  // picked before fetching.
   useEffect(() => {
     if (!token || (currentView !== 'analytics' && currentView !== 'overview')) return;
+    if (trendRange === 'custom' && (!customStartDate || !customEndDate)) return;
     const fetchTrend = async () => {
       setTrendLoading(true);
       try {
         const scopedTool = currentView === 'analytics' ? analyticsTool : 'all';
         const dbParam = scopedTool !== 'all' ? `&dbId=${scopedTool}` : '';
-        const res = await authFetch(`${API_BASE}/overview/trend?range=${trendRange}${dbParam}`);
+        const rangeParam = trendRange === 'custom'
+          ? `startDate=${customStartDate}&endDate=${customEndDate}`
+          : `range=${trendRange}`;
+        const res = await authFetch(`${API_BASE}/overview/trend?${rangeParam}${dbParam}`);
         const data = await res.json();
         setTrendSeries(data.series || []);
       } catch (err) {
@@ -849,7 +907,7 @@ function App() {
       }
     };
     fetchTrend();
-  }, [token, currentView, trendRange, analyticsTool]);
+  }, [token, currentView, trendRange, analyticsTool, customStartDate, customEndDate]);
 
   // Analytics — live activity feed, scoped to the selected tool.
   useEffect(() => {
@@ -1329,17 +1387,14 @@ function App() {
                   <div className="panel">
                     <div className="panel-header">
                       <h2><PanelIconBadge icon={TrendingUp} color={CHART_COLORS.primary} />Assessment Activity Trend</h2>
-                      <div className="range-tabs">
-                        {TREND_RANGES.map(r => (
-                          <button
-                            key={r.key}
-                            className={`range-tab ${trendRange === r.key ? 'active' : ''}`}
-                            onClick={() => setTrendRange(r.key)}
-                          >
-                            {r.label}
-                          </button>
-                        ))}
-                      </div>
+                      <TrendRangeSelector
+                        trendRange={trendRange}
+                        setTrendRange={setTrendRange}
+                        customStartDate={customStartDate}
+                        setCustomStartDate={setCustomStartDate}
+                        customEndDate={customEndDate}
+                        setCustomEndDate={setCustomEndDate}
+                      />
                     </div>
                     {trendLoading ? (
                       <div className="trend-chart-empty">Loading trend...</div>
@@ -1515,17 +1570,14 @@ function App() {
                 <div className="panel">
                   <div className="panel-header">
                     <h2><PanelIconBadge icon={TrendingUp} color={CHART_COLORS.primary} />Assessment Activity Trend</h2>
-                    <div className="range-tabs">
-                      {TREND_RANGES.map(r => (
-                        <button
-                          key={r.key}
-                          className={`range-tab ${trendRange === r.key ? 'active' : ''}`}
-                          onClick={() => setTrendRange(r.key)}
-                        >
-                          {r.label}
-                        </button>
-                      ))}
-                    </div>
+                    <TrendRangeSelector
+                      trendRange={trendRange}
+                      setTrendRange={setTrendRange}
+                      customStartDate={customStartDate}
+                      setCustomStartDate={setCustomStartDate}
+                      customEndDate={customEndDate}
+                      setCustomEndDate={setCustomEndDate}
+                    />
                   </div>
                   {trendLoading ? (
                     <div className="trend-chart-empty">Loading trend...</div>
@@ -1741,17 +1793,14 @@ function App() {
                     <div className="panel">
                       <div className="panel-header">
                         <h2><PanelIconBadge icon={TrendingUp} color={CHART_COLORS.primary} />Activity Trend</h2>
-                        <div className="range-tabs">
-                          {TREND_RANGES.map(r => (
-                            <button
-                              key={r.key}
-                              className={`range-tab ${trendRange === r.key ? 'active' : ''}`}
-                              onClick={() => setTrendRange(r.key)}
-                            >
-                              {r.label}
-                            </button>
-                          ))}
-                        </div>
+                        <TrendRangeSelector
+                          trendRange={trendRange}
+                          setTrendRange={setTrendRange}
+                          customStartDate={customStartDate}
+                          setCustomStartDate={setCustomStartDate}
+                          customEndDate={customEndDate}
+                          setCustomEndDate={setCustomEndDate}
+                        />
                       </div>
                       {trendLoading ? (
                         <div className="trend-chart-empty">Loading trend...</div>
