@@ -1160,32 +1160,35 @@ function App() {
           </ul>
         </div>
 
-        {/* Grouped by category — same grouping Analytics uses (derived from
-            each adapter's metadata.category), so a new category like
-            "Psychometric" gets its own section here automatically the
-            moment a tool declares it, no code change needed. */}
-        {Array.from(new Set(overviewData.map(t => t.category || 'Uncategorized'))).map(cat => (
-          <div className="menu-section" key={cat}>
-            <div className="menu-title">{cat}</div>
-            <ul className="menu-list">
-              {overviewData
-                .filter(t => (t.category || 'Uncategorized') === cat)
-                .map(item => (
-                  <li className="menu-item" key={item.id}>
-                    <div
-                      className={`menu-link ${currentView === item.id ? 'active' : ''}`}
-                      onClick={() => setCurrentView(item.id)}
-                    >
-                      <Database size={18} />
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {item.name}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-            </ul>
-          </div>
-        ))}
+        {/* One entry per category (not per tool) — clicking jumps into
+            Analytics pre-filtered to that category, where the tool
+            dropdown picks a specific one. Categories are derived from
+            each adapter's metadata.category, same as Analytics' own
+            filter, so a new category like "Psychometric" appears here
+            automatically the moment a tool declares it. */}
+        <div className="menu-section">
+          <div className="menu-title">Tool Categories</div>
+          <ul className="menu-list">
+            {Array.from(new Set(overviewData.map(t => t.category || 'Uncategorized'))).map(cat => (
+              <li className="menu-item" key={cat}>
+                <div
+                  className={`menu-link ${currentView === 'analytics' && analyticsCategory === cat ? 'active' : ''}`}
+                  onClick={() => {
+                    setAnalyticsCategory(cat);
+                    const firstInCategory = overviewData.find(t => (t.category || 'Uncategorized') === cat);
+                    if (firstInCategory) setAnalyticsTool(firstInCategory.id);
+                    setCurrentView('analytics');
+                  }}
+                >
+                  <Database size={18} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {cat}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
 
         {/* User profile & Logout */}
         <div className="sidebar-user-profile">
