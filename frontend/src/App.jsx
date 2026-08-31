@@ -343,6 +343,61 @@ function ToolComparisonCharts({ tools }) {
 // everywhere on that page.
 const TOOL_PALETTE = [CHART_COLORS.primary, CHART_COLORS.secondary, CHART_COLORS.success, CHART_COLORS.warning, CHART_COLORS.danger];
 
+// One gradient per KPI card, same 5-hue family as TOOL_PALETTE (each hue
+// paired with its own darker shade) so the metric-colored KPI row and the
+// tool-colored charts below it read as one palette, not two unrelated
+// color systems on the same page.
+const KPI_GRADIENTS = [
+  'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
+  'linear-gradient(135deg, #22d3ee 0%, #0e7490 100%)',
+  'linear-gradient(135deg, #34d399 0%, #047857 100%)',
+  'linear-gradient(135deg, #fb923c 0%, #b45309 100%)',
+  'linear-gradient(135deg, #fb7185 0%, #be123c 100%)'
+];
+
+// Real weighted trend for Total Assessments only — it's a straight sum of
+// per-tool volumes, and each tool already carries a genuine 7-day-vs-
+// prior-7-day comparison (computeTrend on the backend), so combining them
+// weighted by volume is an honest aggregate, not a fabricated number.
+// Deliberately NOT reused for Average Score/Connections/Users — those
+// have no time-series backing, so they get no trend badge at all rather
+// than a made-up one.
+function aggregateVolumeTrend(tools) {
+  if (!tools || tools.length === 0) return null;
+  let weightedSum = 0;
+  let totalWeight = 0;
+  tools.forEach(t => {
+    if (t.trend && t.totalTestTakers > 0) {
+      weightedSum += t.trend.changePercent * t.totalTestTakers;
+      totalWeight += t.totalTestTakers;
+    }
+  });
+  if (totalWeight === 0) return null;
+  const changePercent = Math.round(weightedSum / totalWeight);
+  return { direction: changePercent > 0 ? 'up' : changePercent < 0 ? 'down' : 'flat', changePercent };
+}
+
+// Colorful gradient KPI card. Trend badge only renders when `trend` is
+// passed (i.e. real data exists) — no placeholder "0%" or invented arrows.
+function KpiCard({ icon: Icon, gradient, label, value, sub, trend }) {
+  return (
+    <div className="kpi-card" style={{ background: gradient }}>
+      <div className="kpi-card-icon"><Icon size={18} /></div>
+      <div className="kpi-card-label">{label}</div>
+      <div className="kpi-card-value">{value}</div>
+      <div className="kpi-card-footer">
+        {trend && (
+          <span className="kpi-card-trend">
+            {trend.direction === 'up' ? <TrendingUp size={12} /> : trend.direction === 'down' ? <TrendingDown size={12} /> : <Minus size={12} />}
+            {Math.abs(trend.changePercent)}%
+          </span>
+        )}
+        <span className="kpi-card-sub">{sub}</span>
+      </div>
+    </div>
+  );
+}
+
 // Overview-only chart: composition, not comparison — "what share of all
 // activity does each tool represent." Analytics' All-Tools view has no
 // pie/donut at all, so this is a genuinely different question answered
@@ -1144,44 +1199,47 @@ function App() {
               </div>
             ) : (
               <>
-                {/* Top KPI strip — trimmed to the 5 most important numbers */}
+                {/* Top KPI strip — colorful gradient cards, 5 most important
+                    numbers. Trend badge only on Total Assessments, the one
+                    metric with real day-over-day data behind it. */}
                 {summaryData && (
-                  <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
-                    <div className="stat-card">
-                      <div>
-                        <span className="stat-label">Total Assessments</span>
-                        <div className="stat-value">{summaryData.totalAssessments}</div>
-                        <span className="stat-desc">Across all tools</span>
-                      </div>
-                    </div>
-                    <div className="stat-card">
-                      <div>
-                        <span className="stat-label">Average Score</span>
-                        <div className="stat-value">{summaryData.averageScorePercentage}%</div>
-                        <span className="stat-desc">Weighted across tools</span>
-                      </div>
-                    </div>
-                    <div className="stat-card">
-                      <div>
-                        <span className="stat-label">Live Connections</span>
-                        <div className="stat-value">{summaryData.liveToolsCount} / {summaryData.totalTools}</div>
-                        <span className="stat-desc">{summaryData.mockToolsCount} using mock data</span>
-                      </div>
-                    </div>
-                    <div className="stat-card">
-                      <div>
-                        <span className="stat-label">Reports Generated</span>
-                        <div className="stat-value">{reportsSummary ? reportsSummary.totalGenerated : '—'}</div>
-                        <span className="stat-desc">{reportsSummary ? `${reportsSummary.successRate}% success rate` : 'Loading...'}</span>
-                      </div>
-                    </div>
-                    <div className="stat-card">
-                      <div>
-                        <span className="stat-label">Active Users</span>
-                        <div className="stat-value">{entitySummary ? entitySummary.totalUsers : '—'}</div>
-                        <span className="stat-desc">Across live-connected tools</span>
-                      </div>
-                    </div>
+                  <div className="kpi-grid" style={{ marginBottom: '1.5rem' }}>
+                    <KpiCard
+                      icon={BarChart3}
+                      gradient={KPI_GRADIENTS[0]}
+                      label="Total Assessments"
+                      value={summaryData.totalAssessments}
+                      sub="Across all tools"
+                      trend={aggregateVolumeTrend(overviewData)}
+                    />
+                    <KpiCard
+                      icon={Award}
+                      gradient={KPI_GRADIENTS[1]}
+                      label="Average Score"
+                      value={`${summaryData.averageScorePercentage}%`}
+                      sub="Weighted across tools"
+                    />
+                    <KpiCard
+                      icon={Database}
+                      gradient={KPI_GRADIENTS[2]}
+                      label="Live Connections"
+                      value={`${summaryData.liveToolsCount} / ${summaryData.totalTools}`}
+                      sub={`${summaryData.mockToolsCount} using mock data`}
+                    />
+                    <KpiCard
+                      icon={FileCheck2}
+                      gradient={KPI_GRADIENTS[3]}
+                      label="Reports Generated"
+                      value={reportsSummary ? reportsSummary.totalGenerated : '—'}
+                      sub={reportsSummary ? `${reportsSummary.successRate}% success rate` : 'Loading...'}
+                    />
+                    <KpiCard
+                      icon={User}
+                      gradient={KPI_GRADIENTS[4]}
+                      label="Active Users"
+                      value={entitySummary ? entitySummary.totalUsers : '—'}
+                      sub="Across live-connected tools"
+                    />
                   </div>
                 )}
 
