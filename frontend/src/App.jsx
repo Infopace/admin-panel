@@ -24,8 +24,35 @@ import {
   HeartPulse,
   BarChart3
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RTooltip,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  LabelList
+} from 'recharts';
 
 const API_BASE = 'http://localhost:5000/api';
+
+// Shared chart palette — mirrors the CSS custom properties in index.css
+// (kept as literal hex here since Recharts renders raw SVG and some
+// browsers don't resolve var() inside SVG presentation attributes).
+const CHART_COLORS = {
+  primary: '#4f46e5',
+  secondary: '#0891b2',
+  success: '#16a34a',
+  warning: '#ea580c',
+  danger: '#dc2626',
+  muted: '#94a3b8'
+};
 
 const TREND_RANGES = [
   { key: 'today', label: 'Today' },
@@ -110,85 +137,239 @@ function formatShortDate(dateStr) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
-// Minimal dependency-free bar chart for the usage trend panel. Built with
-// flexbox columns (not raw SVG scaling) so bars stay proportioned and a
-// baseline + date labels make it read as a chart even when only one or
-// two days have activity. Hovering or clicking a bar shows a per-tool
-// breakdown for that day (toolNames maps dbId -> display name).
-function TrendChart({ series, toolNames }) {
-  const [activeIndex, setActiveIndex] = useState(null);
+// Custom tooltip for the trend chart — keeps the per-tool breakdown that
+// hovering a day already gave admins, now driven by Recharts instead of
+// hand-rolled hover state.
+function TrendTooltip({ active, payload, toolNames }) {
+  if (!active || !payload || payload.length === 0) return null;
+  const point = payload[0].payload;
+  const byToolEntries = point.byTool
+    ? Object.entries(point.byTool).sort((a, b) => b[1] - a[1])
+    : [];
+  return (
+    <div className="chart-tooltip">
+      <div className="chart-tooltip-header">
+        {formatShortDate(point.date)} — {point.completed} total
+      </div>
+      {byToolEntries.length > 0 ? (
+        <ul className="chart-tooltip-list">
+          {byToolEntries.map(([dbId, count]) => (
+            <li key={dbId}>
+              <span>{(toolNames && toolNames[dbId]) || dbId}</span>
+              <strong>{count}</strong>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="chart-tooltip-empty">No activity</div>
+      )}
+    </div>
+  );
+}
 
+// Usage trend — real area chart (Recharts) with a gradient fill. Thins out
+// X-axis labels on longer ranges so dates don't collide, same rule the old
+// hand-rolled version used (label every ceil(n/9) points, always show the
+// last/most-recent date).
+function TrendChart({ series, toolNames }) {
   if (!series || series.length === 0) {
     return <div className="trend-chart-empty">No activity data for this range.</div>;
   }
 
-  const maxVal = Math.max(...series.map(p => p.completed), 1);
-  // Thin out date labels on longer ranges so they don't collide. The
-  // last date is always shown (today); skip the nearest regular tick
-  // if it would land right next to it.
   const labelEvery = Math.max(1, Math.ceil(series.length / 9));
-  const lastIndex = series.length - 1;
-  const lastRegularTick = Math.floor(lastIndex / labelEvery) * labelEvery;
-  const suppressLastRegularTick = lastIndex - lastRegularTick > 0 && lastIndex - lastRegularTick < labelEvery / 2;
 
   return (
-    <div className="trend-chart">
-      <div className="trend-chart-bars">
-        {series.map((point, i) => {
-          const byToolEntries = point.byTool
-            ? Object.entries(point.byTool).sort((a, b) => b[1] - a[1])
-            : [];
-          return (
-            <div
-              className="trend-bar-col"
-              key={point.date}
-              style={{ position: 'relative' }}
-              onMouseEnter={() => setActiveIndex(i)}
-              onMouseLeave={() => setActiveIndex(prev => (prev === i ? null : prev))}
-              onClick={() => setActiveIndex(prev => (prev === i ? null : i))}
+    <ResponsiveContainer width="100%" height={260}>
+      <AreaChart data={series} margin={{ top: 10, right: 12, left: -12, bottom: 0 }}>
+        <defs>
+          <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={CHART_COLORS.primary} stopOpacity={0.35} />
+            <stop offset="100%" stopColor={CHART_COLORS.primary} stopOpacity={0.02} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
+        <XAxis
+          dataKey="date"
+          tickFormatter={formatShortDate}
+          interval={labelEvery - 1}
+          tick={{ fontSize: 11, fill: 'var(--text-muted)' }}
+          axisLine={{ stroke: 'var(--border-color)' }}
+          tickLine={false}
+        />
+        <YAxis
+          allowDecimals={false}
+          tick={{ fontSize: 11, fill: 'var(--text-muted)' }}
+          axisLine={false}
+          tickLine={false}
+          width={28}
+        />
+        <RTooltip content={<TrendTooltip toolNames={toolNames} />} cursor={{ stroke: 'var(--border-color)' }} />
+        <Area
+          type="monotone"
+          dataKey="completed"
+          stroke={CHART_COLORS.primary}
+          strokeWidth={2}
+          fill="url(#trendFill)"
+          activeDot={{ r: 5 }}
+        />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+// Score Distribution — donut chart for Low/Medium/High. Donuts stay
+// readable up to ~5 slices; 3 buckets is exactly the sweet spot.
+function ScoreDistributionChart({ distribution }) {
+  const data = [
+    { name: 'Low', value: distribution.low, color: CHART_COLORS.danger },
+    { name: 'Medium', value: distribution.medium, color: CHART_COLORS.warning },
+    { name: 'High', value: distribution.high, color: CHART_COLORS.success }
+  ];
+  const allZero = data.every(d => d.value === 0);
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+      <div style={{ width: 160, height: 160, flexShrink: 0 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={48}
+              outerRadius={72}
+              paddingAngle={allZero ? 0 : 3}
+              strokeWidth={0}
             >
-              {point.completed > 0 && (
-                <span className="trend-bar-value">{point.completed}</span>
-              )}
-              <div
-                className="trend-bar"
-                style={{ height: point.completed > 0 ? `${Math.max((point.completed / maxVal) * 100, 4)}%` : '0%' }}
-              />
-              {activeIndex === i && (
-                <div className="trend-bar-tooltip">
-                  <div className="trend-bar-tooltip-header">
-                    {formatShortDate(point.date)} — {point.completed} total
-                  </div>
-                  {byToolEntries.length > 0 ? (
-                    <ul className="trend-bar-tooltip-list">
-                      {byToolEntries.map(([dbId, count]) => (
-                        <li key={dbId}>
-                          <span>{(toolNames && toolNames[dbId]) || dbId}</span>
-                          <strong>{count}</strong>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <div className="trend-bar-tooltip-empty">No activity</div>
-                  )}
-                </div>
-              )}
+              {data.map(d => <Cell key={d.name} fill={d.color} />)}
+            </Pie>
+            <RTooltip
+              formatter={(value, name) => [`${value}%`, name]}
+              contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="dimension-list" style={{ flex: 1, minWidth: 180 }}>
+        {data.map(d => (
+          <div className="dimension-row" key={d.name}>
+            <span className="dimension-label">{d.name}</span>
+            <div className="dimension-track">
+              <div className="dimension-fill" style={{ width: `${d.value}%`, background: d.color }} />
             </div>
-          );
-        })}
+            <span className="dimension-value">{d.value}%</span>
+          </div>
+        ))}
       </div>
-      <div className="trend-chart-axis">
-        {series.map((point, i) => {
-          const isRegularTick = i % labelEvery === 0 && !(suppressLastRegularTick && i === lastRegularTick);
-          if (!isRegularTick && i !== lastIndex) return null;
-          const leftPct = series.length > 1 ? (i / (series.length - 1)) * 100 : 50;
-          return (
-            <span className="trend-chart-label" key={point.date} style={{ left: `${leftPct}%` }}>
-              {formatShortDate(point.date)}
-            </span>
-          );
-        })}
+    </div>
+  );
+}
+
+// Tool comparison — two small bar charts answering the doc's own questions
+// verbatim: "which tool is used most" and "which tool has unusually
+// low/high scores." Volume and score live on very different scales, so
+// they're two charts rather than one dual-axis chart trying to do both.
+function ToolComparisonCharts({ tools }) {
+  if (!tools || tools.length === 0) return null;
+  const volumeData = [...tools].sort((a, b) => b.totalTestTakers - a.totalTestTakers);
+  const scoreData = [...tools].sort((a, b) => b.averageScorePercentage - a.averageScorePercentage);
+
+  const scoreColor = (pct) => (pct >= 85 ? CHART_COLORS.success : pct >= 60 ? CHART_COLORS.warning : CHART_COLORS.danger);
+
+  return (
+    <div className="split-grid">
+      <div className="panel">
+        <div className="panel-header">
+          <h2>Volume by Tool</h2>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Which tool is used most</span>
+        </div>
+        <ResponsiveContainer width="100%" height={Math.max(volumeData.length * 42, 120)}>
+          <BarChart data={volumeData} layout="vertical" margin={{ top: 0, right: 24, left: 0, bottom: 0 }}>
+            <XAxis type="number" hide />
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={140}
+              tick={{ fontSize: 12, fill: 'var(--text-secondary)' }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <RTooltip
+              formatter={(value) => [`${value} candidates`, 'Attempts']}
+              contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
+            />
+            <Bar dataKey="totalTestTakers" fill={CHART_COLORS.primary} radius={[0, 4, 4, 0]} barSize={18}>
+              <LabelList dataKey="totalTestTakers" position="right" style={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
       </div>
+
+      <div className="panel">
+        <div className="panel-header">
+          <h2>Avg Score by Tool</h2>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Which tool scores unusually low/high</span>
+        </div>
+        <ResponsiveContainer width="100%" height={Math.max(scoreData.length * 42, 120)}>
+          <BarChart data={scoreData} layout="vertical" margin={{ top: 0, right: 24, left: 0, bottom: 0 }}>
+            <XAxis type="number" domain={[0, 100]} hide />
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={140}
+              tick={{ fontSize: 12, fill: 'var(--text-secondary)' }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <RTooltip
+              formatter={(value) => [`${value}%`, 'Avg Score']}
+              contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
+            />
+            <Bar dataKey="averageScorePercentage" radius={[0, 4, 4, 0]} barSize={18}>
+              {scoreData.map(d => <Cell key={d.id} fill={scoreColor(d.averageScorePercentage)} />)}
+              <LabelList dataKey="averageScorePercentage" position="right" formatter={(v) => `${v}%`} style={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+const STATUS_COLOR = {
+  healthy: CHART_COLORS.success,
+  warning: CHART_COLORS.warning,
+  critical: CHART_COLORS.danger,
+  mock: CHART_COLORS.muted,
+  unknown: CHART_COLORS.muted
+};
+
+// Status board — a status-page-style strip (colored dot + top accent bar
+// per tile) instead of text-heavy cards, so "which of N tools is red" reads
+// at a glance rather than requiring you to read every card.
+function StatusGrid({ healthData }) {
+  if (!healthData) return null;
+  return (
+    <div className="status-board">
+      {Object.keys(healthData).map(dbId => {
+        const h = healthData[dbId];
+        const color = STATUS_COLOR[h.status] || CHART_COLORS.muted;
+        return (
+          <div className="status-tile" key={dbId} style={{ borderTopColor: color }}>
+            <div className="status-tile-top">
+              <span className="status-tile-dot" style={{ background: color, boxShadow: `0 0 0 4px ${color}22` }} />
+              <span className="status-tile-name">{h.name}</span>
+            </div>
+            <div className="status-tile-meta">
+              {h.calls > 0 ? `${h.avgLatencyMs}ms avg · ${h.errorRate}% errors` : 'No live queries yet'}
+            </div>
+            <div className="status-tile-footer">
+              <span className={`health-status-pill ${h.status}`}>{h.status}</span>
+              <AvailabilityPill availability={h.availability} />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -962,6 +1143,10 @@ function App() {
                   )}
                 </div>
 
+                {/* Volume + Score comparison across tools (doc section 2's
+                    "which tool is used most / scores unusually low or high") */}
+                <ToolComparisonCharts tools={overviewData} />
+
                 {/* Tool-wise Monitoring (doc section 2) */}
                 <h2 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '1rem' }}>Tool-wise Monitoring</h2>
                 <div className="table-section">
@@ -1110,34 +1295,7 @@ function App() {
                       </div>
                     )}
                   </div>
-                  {healthData && (
-                    <div className="health-grid">
-                      {Object.keys(healthData).map(dbId => {
-                        const h = healthData[dbId];
-                        return (
-                          <div className="health-card" key={dbId}>
-                            <div className="health-card-header">
-                              <span>{h.name}</span>
-                              <div style={{ display: 'flex', gap: '0.35rem' }}>
-                                <AvailabilityPill availability={h.availability} />
-                                <span className={`health-status-pill ${h.status}`}>{h.status}</span>
-                              </div>
-                            </div>
-                            <div className="health-card-meta">
-                              {h.calls > 0 ? (
-                                <>{h.avgLatencyMs}ms avg · {h.errorRate}% error rate · {h.errors} failed requests ({h.calls} calls)</>
-                              ) : (
-                                <>No live query attempts yet</>
-                              )}
-                              {h.lastSuccessAt && (
-                                <div>Last successful processing: {new Date(h.lastSuccessAt).toLocaleString()}</div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                  <StatusGrid healthData={healthData} />
                 </div>
 
                 {/* Organizations / Users / Reports summary row (doc section 16) */}
@@ -1218,29 +1376,7 @@ function App() {
                             Min {tool.minScorePercentage}% · Max {tool.maxScorePercentage}%
                           </span>
                         </div>
-                        <div className="dimension-list">
-                          <div className="dimension-row">
-                            <span className="dimension-label">Low</span>
-                            <div className="dimension-track">
-                              <div className="dimension-fill" style={{ width: `${tool.scoreDistribution.low}%`, background: 'var(--accent-danger)' }} />
-                            </div>
-                            <span className="dimension-value">{tool.scoreDistribution.low}%</span>
-                          </div>
-                          <div className="dimension-row">
-                            <span className="dimension-label">Medium</span>
-                            <div className="dimension-track">
-                              <div className="dimension-fill" style={{ width: `${tool.scoreDistribution.medium}%`, background: 'var(--accent-warning)' }} />
-                            </div>
-                            <span className="dimension-value">{tool.scoreDistribution.medium}%</span>
-                          </div>
-                          <div className="dimension-row">
-                            <span className="dimension-label">High</span>
-                            <div className="dimension-track">
-                              <div className="dimension-fill" style={{ width: `${tool.scoreDistribution.high}%`, background: 'var(--accent-success)' }} />
-                            </div>
-                            <span className="dimension-value">{tool.scoreDistribution.high}%</span>
-                          </div>
-                        </div>
+                        <ScoreDistributionChart distribution={tool.scoreDistribution} />
                       </div>
                     )}
 

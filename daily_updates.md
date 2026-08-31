@@ -4,6 +4,14 @@ Short, crisp log of what got built each day. Newest entry on top.
 
 ---
 
+## 2026-08-31
+
+- Labeling/clarity fixes on the Master KPI cards: "Total Assessments" → "Total / Completed Assessments" (in-progress/abandoned aren't tracked), "Reports Pending" now reads as a non-tracked always-zero value, "Failed Requests" clarified as DB query errors, not assessment processing failures
+- Confirmed with the Market Potential (db4) owner directly against live Supabase: `status` column only ever holds one value (`assessment_complete`) and rows are only written on final submit — so In Progress/Abandoned/Completion Rate/Completion Funnel are genuinely blocked for that tool until the assessment website itself changes what it writes and when, not fixable from the admin panel or Supabase alone
+- `started_at timestamptz` column added to db4's `submissions` table (ready for Time Monitoring) — stays empty until the assessment website is changed to populate it on submit
+- Installed Recharts and replaced the hand-rolled div/CSS charts with real ones: Usage Trend is now a gradient area chart (same per-tool tooltip breakdown on hover), Score Distribution is a donut, added two new "Volume by Tool" / "Avg Score by Tool" horizontal bar charts on the All-Tools Analytics view, and System Health is now a status-board grid (colored status dot + top accent bar per tool) instead of text-only cards
+- Verified all of the above by running the app end-to-end (backend + frontend + Playwright screenshots) rather than just building
+
 ## 2026-08-28
 
 - Reviewed `DASHBOARD.docx` against the codebase, mapped every section to build status
