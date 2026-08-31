@@ -387,6 +387,11 @@ function ToolShareDonut({ tools }) {
 // Score Distribution by Tool — stacked horizontal bar chart. A new chart
 // type on Overview (stacked composition per category), distinct from the
 // donut (composition of one whole) and the trend area chart (time series).
+// Softer, cooler 3-tone scale for this chart specifically — the standard
+// red/amber/green triad read as too alarming stacked wall-to-wall across
+// 5 bars. Still low-to-high ordered, just less "warning siren."
+const SCORE_BAND_COLORS = { low: '#fb923c', medium: '#a78bfa', high: '#22d3ee' };
+
 function ScoreDistributionStackedChart({ tools }) {
   if (!tools || tools.length === 0) return null;
   const data = tools.map(t => ({
@@ -406,15 +411,15 @@ function ScoreDistributionStackedChart({ tools }) {
             formatter={(value, name) => [`${value}%`, name]}
             contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
           />
-          <Bar dataKey="Low" stackId="s" fill={CHART_COLORS.danger} barSize={16} radius={[4, 0, 0, 4]} />
-          <Bar dataKey="Medium" stackId="s" fill={CHART_COLORS.warning} barSize={16} />
-          <Bar dataKey="High" stackId="s" fill={CHART_COLORS.success} barSize={16} radius={[0, 4, 4, 0]} />
+          <Bar dataKey="Low" stackId="s" fill={SCORE_BAND_COLORS.low} barSize={16} radius={[4, 0, 0, 4]} />
+          <Bar dataKey="Medium" stackId="s" fill={SCORE_BAND_COLORS.medium} barSize={16} />
+          <Bar dataKey="High" stackId="s" fill={SCORE_BAND_COLORS.high} barSize={16} radius={[0, 4, 4, 0]} />
         </BarChart>
       </ResponsiveContainer>
       <div style={{ display: 'flex', gap: '1.25rem', justifyContent: 'center', marginTop: '0.5rem', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-        <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: CHART_COLORS.danger, marginRight: '0.35rem' }} />Low</span>
-        <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: CHART_COLORS.warning, marginRight: '0.35rem' }} />Medium</span>
-        <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: CHART_COLORS.success, marginRight: '0.35rem' }} />High</span>
+        <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: SCORE_BAND_COLORS.low, marginRight: '0.35rem' }} />Low</span>
+        <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: SCORE_BAND_COLORS.medium, marginRight: '0.35rem' }} />Medium</span>
+        <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: SCORE_BAND_COLORS.high, marginRight: '0.35rem' }} />High</span>
       </div>
     </div>
   );
