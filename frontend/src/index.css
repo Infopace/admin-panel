@@ -1116,46 +1116,6 @@ body {
   flex-wrap: wrap;
 }
 
-/* Status strip (Overview) — slim single-row chips, lighter-weight than
-   the status-board tiles used on Analytics */
-.status-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-}
-
-.status-chip {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0.9rem 0.5rem 0.5rem;
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  background-color: var(--bg-surface);
-  font-size: 0.8rem;
-}
-
-.status-chip-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.status-chip-name {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-.status-chip-status {
-  text-transform: capitalize;
-  font-weight: 600;
-}
-
 /* Panel-header icon badge — carries the KPI cards' colored-icon language
    into every other panel on the page instead of plain black icons */
 .panel-icon-badge {

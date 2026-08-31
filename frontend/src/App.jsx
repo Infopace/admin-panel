@@ -566,30 +566,6 @@ function StatusGrid({ healthData }) {
   );
 }
 
-// Overview-only: a slim single-row status strip (dot + name only) instead
-// of Analytics' full status-card grid — enough to see "is everything green"
-// at a glance without the per-card latency/error detail, which belongs on
-// the deeper Analytics page, not the summary one.
-function StatusStrip({ healthData }) {
-  if (!healthData) return null;
-  return (
-    <div className="status-strip">
-      {Object.keys(healthData).map(dbId => {
-        const h = healthData[dbId];
-        const color = STATUS_COLOR[h.status] || CHART_COLORS.muted;
-        const StatusIcon = h.status === 'healthy' ? Check : h.status === 'critical' ? AlertTriangle : h.status === 'warning' ? AlertCircle : HeartPulse;
-        return (
-          <div className="status-chip" key={dbId}>
-            <span className="status-chip-icon" style={{ background: color }}><StatusIcon size={12} /></span>
-            <span className="status-chip-name">{h.name}</span>
-            <span className="status-chip-status" style={{ color }}>{h.status}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 // A small colored circle around a panel-header icon — the "icon badge"
 // visual language carried through from the KPI cards, so headers don't
 // revert to plain black icons once you scroll past the top row.
@@ -1357,12 +1333,27 @@ function App() {
                   </div>
                 </div>
 
-                {/* Slim system-status strip — full detail lives on Analytics */}
+                {/* System Health — same full status-tile grid as Analytics */}
                 <div className="panel">
                   <div className="panel-header">
-                    <h2><PanelIconBadge icon={HeartPulse} color={CHART_COLORS.success} />System Status</h2>
+                    <h2><PanelIconBadge icon={HeartPulse} color={CHART_COLORS.success} />System Health</h2>
+                    {reportsSummary && (
+                      <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+                        <span><FileCheck2 size={13} style={{ verticalAlign: '-2px' }} /> {reportsSummary.totalGenerated} generated / downloaded</span>
+                        <span>{reportsSummary.totalFailed} failed</span>
+                        <span>0 pending</span>
+                        <span>{reportsSummary.totalRegenerated} regenerated</span>
+                        <span>{reportsSummary.successRate}% success rate</span>
+                        {reportsSummary.avgGenerationTimeMs !== null && (
+                          <span>{reportsSummary.avgGenerationTimeMs}ms avg generation time</span>
+                        )}
+                        <span className={`health-status-pill ${reportsSummary.successRate >= 95 ? 'healthy' : reportsSummary.successRate >= 80 ? 'warning' : 'critical'}`}>
+                          Report Service: {reportsSummary.successRate >= 95 ? 'Healthy' : reportsSummary.successRate >= 80 ? 'Degraded' : 'Critical'}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  <StatusStrip healthData={healthData} />
+                  <StatusGrid healthData={healthData} />
                 </div>
 
                 {/* Per-tool cards — click through to manage candidates */}
@@ -1635,14 +1626,6 @@ function App() {
                   <StatusGrid healthData={healthData} />
                 </div>
 
-                {/* Organizations / Users / Reports summary row (doc section 16) */}
-                {entitySummary && (
-                  <div className="kpi-grid">
-                    <KpiCard icon={BookOpen} gradient={KPI_GRADIENTS[1]} label="Organizations" value={entitySummary.totalOrganizations} sub="Across live-connected tools" />
-                    <KpiCard icon={User} gradient={KPI_GRADIENTS[4]} label="Users" value={entitySummary.totalUsers} sub="Across live-connected tools" />
-                    <KpiCard icon={FileCheck2} gradient={KPI_GRADIENTS[2]} label="Reports" value={entitySummary.totalReports} sub="Successfully generated" />
-                  </div>
-                )}
               </>
             ) : (
               (() => {
