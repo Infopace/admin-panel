@@ -37,7 +37,9 @@ import {
   Cell,
   BarChart,
   Bar,
-  LabelList
+  LabelList,
+  RadialBarChart,
+  RadialBar
 } from 'recharts';
 
 const API_BASE = 'http://localhost:5000/api';
@@ -382,29 +384,70 @@ function ToolShareDonut({ tools }) {
 // score into one glanceable row per tool, instead of Analytics' two
 // separate full-size bar-chart panels. Executive-summary style — rank,
 // name, a mini inline bar, and both numbers in one line.
-function TopToolsLeaderboard({ tools }) {
+// Score Distribution by Tool — stacked horizontal bar chart. A new chart
+// type on Overview (stacked composition per category), distinct from the
+// donut (composition of one whole) and the trend area chart (time series).
+function ScoreDistributionStackedChart({ tools }) {
   if (!tools || tools.length === 0) return null;
-  const ranked = [...tools].sort((a, b) => b.totalTestTakers - a.totalTestTakers);
-  const maxVol = Math.max(...ranked.map(t => t.totalTestTakers), 1);
-  const scoreColor = (pct) => (pct >= 85 ? CHART_COLORS.success : pct >= 60 ? CHART_COLORS.warning : CHART_COLORS.danger);
+  const data = tools.map(t => ({
+    name: t.name,
+    Low: t.scoreDistribution.low,
+    Medium: t.scoreDistribution.medium,
+    High: t.scoreDistribution.high
+  }));
 
   return (
-    <div className="leaderboard">
-      {ranked.map((t, i) => (
-        <div className="leaderboard-row" key={t.id}>
-          <span className="leaderboard-rank">{i + 1}</span>
-          <div className="leaderboard-main">
-            <div className="leaderboard-top">
-              <span className="leaderboard-name">{t.name}</span>
-              <span className="leaderboard-score" style={{ color: scoreColor(t.averageScorePercentage) }}>{t.averageScorePercentage}%</span>
-            </div>
-            <div className="leaderboard-track">
-              <div className="leaderboard-fill" style={{ width: `${(t.totalTestTakers / maxVol) * 100}%`, background: TOOL_PALETTE[i % TOOL_PALETTE.length] }} />
-            </div>
+    <div>
+      <ResponsiveContainer width="100%" height={Math.max(data.length * 44, 140)}>
+        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 12, left: 0, bottom: 0 }}>
+          <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} unit="%" />
+          <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} />
+          <RTooltip
+            formatter={(value, name) => [`${value}%`, name]}
+            contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
+          />
+          <Bar dataKey="Low" stackId="s" fill={CHART_COLORS.danger} barSize={16} radius={[4, 0, 0, 4]} />
+          <Bar dataKey="Medium" stackId="s" fill={CHART_COLORS.warning} barSize={16} />
+          <Bar dataKey="High" stackId="s" fill={CHART_COLORS.success} barSize={16} radius={[0, 4, 4, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+      <div style={{ display: 'flex', gap: '1.25rem', justifyContent: 'center', marginTop: '0.5rem', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+        <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: CHART_COLORS.danger, marginRight: '0.35rem' }} />Low</span>
+        <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: CHART_COLORS.warning, marginRight: '0.35rem' }} />Medium</span>
+        <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: CHART_COLORS.success, marginRight: '0.35rem' }} />High</span>
+      </div>
+    </div>
+  );
+}
+
+// Average Score by Tool — radial gauge chart. A third, visually distinct
+// chart form (circular progress rings) rounding out area/donut/stacked-bar.
+function AvgScoreRadial({ tools }) {
+  if (!tools || tools.length === 0) return null;
+  const data = tools.map((t, i) => ({ name: t.name, value: t.averageScorePercentage, fill: TOOL_PALETTE[i % TOOL_PALETTE.length] }));
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', flexWrap: 'wrap' }}>
+      <div style={{ width: 210, height: 210, flexShrink: 0 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <RadialBarChart innerRadius="28%" outerRadius="100%" barSize={12} data={data} startAngle={90} endAngle={-270}>
+            <RadialBar dataKey="value" background={{ fill: 'var(--bg-surface-hover)' }} cornerRadius={6} />
+            <RTooltip
+              formatter={(value, name, props) => [`${value}%`, props.payload.name]}
+              contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
+            />
+          </RadialBarChart>
+        </ResponsiveContainer>
+      </div>
+      <div style={{ flex: 1, minWidth: 170, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+        {data.map(d => (
+          <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', fontSize: '0.82rem' }}>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: d.fill, flexShrink: 0 }} />
+            <span style={{ flex: 1, color: 'var(--text-secondary)' }}>{d.name}</span>
+            <strong style={{ color: 'var(--text-primary)' }}>{d.value}%</strong>
           </div>
-          <span className="leaderboard-volume">{t.totalTestTakers}</span>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -1168,34 +1211,42 @@ function App() {
                   </div>
                 </div>
 
-                {/* Top-tools leaderboard + Attention Required, side by side */}
+                {/* Score composition (stacked bar) + Avg Score (radial gauge) —
+                    two more chart forms, side by side */}
                 <div className="split-grid">
                   <div className="panel">
                     <div className="panel-header">
-                      <h2>Top Performing Tools</h2>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Ranked by volume</span>
+                      <h2>Score Composition by Tool</h2>
                     </div>
-                    <TopToolsLeaderboard tools={overviewData} />
+                    <ScoreDistributionStackedChart tools={overviewData} />
                   </div>
 
                   <div className="panel">
                     <div className="panel-header">
-                      <h2><AlertTriangle size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />Attention Required</h2>
-                      <button className="btn btn-secondary btn-sm" onClick={() => { setAnalyticsTool('all'); setCurrentView('analytics'); }}>
-                        View All
-                      </button>
+                      <h2>Average Score</h2>
                     </div>
-                    <div className="alerts-list">
-                      {alertsData.slice(0, 4).map((alert, idx) => (
-                        <div className={`alert-item ${alert.severity}`} key={idx}>
-                          <div className="alert-item-body">
-                            {alert.tool && <strong>{alert.tool}</strong>}
-                            <span>{alert.message}</span>
-                          </div>
+                    <AvgScoreRadial tools={overviewData} />
+                  </div>
+                </div>
+
+                {/* Attention Required */}
+                <div className="panel">
+                  <div className="panel-header">
+                    <h2><AlertTriangle size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />Attention Required</h2>
+                    <button className="btn btn-secondary btn-sm" onClick={() => { setAnalyticsTool('all'); setCurrentView('analytics'); }}>
+                      View All
+                    </button>
+                  </div>
+                  <div className="alerts-list">
+                    {alertsData.slice(0, 4).map((alert, idx) => (
+                      <div className={`alert-item ${alert.severity}`} key={idx}>
+                        <div className="alert-item-body">
+                          {alert.tool && <strong>{alert.tool}</strong>}
+                          <span>{alert.message}</span>
                         </div>
-                      ))}
-                      {alertsData.length === 0 && <div className="trend-chart-empty">Loading alerts...</div>}
-                    </div>
+                      </div>
+                    ))}
+                    {alertsData.length === 0 && <div className="trend-chart-empty">Loading alerts...</div>}
                   </div>
                 </div>
 
