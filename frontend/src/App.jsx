@@ -1160,24 +1160,32 @@ function App() {
           </ul>
         </div>
 
-        <div className="menu-section">
-          <div className="menu-title">Assessment Tools</div>
-          <ul className="menu-list">
-            {dbStatuses && Object.keys(dbStatuses).map(dbId => (
-              <li className="menu-item" key={dbId}>
-                <div
-                  className={`menu-link ${currentView === dbId ? 'active' : ''}`}
-                  onClick={() => setCurrentView(dbId)}
-                >
-                  <Database size={18} />
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {dbStatuses[dbId].name}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {/* Grouped by category — same grouping Analytics uses (derived from
+            each adapter's metadata.category), so a new category like
+            "Psychometric" gets its own section here automatically the
+            moment a tool declares it, no code change needed. */}
+        {Array.from(new Set(overviewData.map(t => t.category || 'Uncategorized'))).map(cat => (
+          <div className="menu-section" key={cat}>
+            <div className="menu-title">{cat}</div>
+            <ul className="menu-list">
+              {overviewData
+                .filter(t => (t.category || 'Uncategorized') === cat)
+                .map(item => (
+                  <li className="menu-item" key={item.id}>
+                    <div
+                      className={`menu-link ${currentView === item.id ? 'active' : ''}`}
+                      onClick={() => setCurrentView(item.id)}
+                    >
+                      <Database size={18} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.name}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        ))}
 
         {/* User profile & Logout */}
         <div className="sidebar-user-profile">

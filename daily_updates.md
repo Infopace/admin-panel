@@ -6,6 +6,7 @@ Short, crisp log of what got built each day. Newest entry on top.
 
 ## 2026-08-31
 
+- Sidebar tool list is now grouped by category instead of one flat "Assessment Tools" list — same category-derivation logic Analytics' filter already uses (from each adapter's `metadata.category`), switched from `dbStatuses` (no category field) to `overviewData` (has it) as the data source. A tool like Personality with `category: 'Psychometric'` now gets its own "PSYCHOMETRIC" section header automatically, separate from "AI ASSESSMENT" — no hardcoding, no per-tool sidebar code
 - Fixed a spacing bug: `.table-section` (Tool-wise Monitoring) had `margin-top` but no `margin-bottom`, so it sat flush against the Live Activity/Attention Required panels directly below it with zero gap — added the missing margin
 - Extended KPI_GRADIENTS from 5 to 9 distinct colors and stopped the Master KPI row (9 cards) from cycling through only 5 — "Total/Completed Assessments" and "Active Users" were both landing on the same indigo gradient and sitting directly on top of each other (card 1, card 6, same 5-column grid). Overview's 5-card row and Payment Monitoring's 2-3 cards were already fine since they never exceeded 5 distinct indices
 - Fixed the KPI card trend badge (Total Assessments) — up and down were both rendering as the same translucent-white pill, distinguished only by a tiny 12px arrow icon that's hard to read at a glance. Now up is a green pill and down is a red pill; flat stays neutral white
