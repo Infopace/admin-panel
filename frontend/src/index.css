@@ -1072,6 +1072,119 @@ body {
   flex-wrap: wrap;
 }
 
+/* Status strip (Overview) — slim single-row chips, lighter-weight than
+   the status-board tiles used on Analytics */
+.status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.status-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background-color: var(--bg-surface);
+  font-size: 0.8rem;
+}
+
+.status-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-chip-name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.status-chip-status {
+  text-transform: capitalize;
+  font-weight: 600;
+}
+
+/* Leaderboard (Overview) — compact ranked list combining volume + score */
+.leaderboard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.leaderboard-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.leaderboard-rank {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background-color: var(--bg-surface-hover);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.leaderboard-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.leaderboard-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.leaderboard-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.leaderboard-score {
+  font-size: 0.8rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.leaderboard-track {
+  height: 6px;
+  border-radius: 999px;
+  background-color: var(--bg-surface-hover);
+  overflow: hidden;
+}
+
+.leaderboard-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: var(--transition-fast);
+}
+
+.leaderboard-volume {
+  width: 40px;
+  text-align: right;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
 .trend-chart-empty {
   padding: 2.5rem 0;
   text-align: center;

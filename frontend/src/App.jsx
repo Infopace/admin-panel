@@ -336,6 +336,79 @@ function ToolComparisonCharts({ tools }) {
   );
 }
 
+// Fixed per-tool palette (index-based, stable regardless of sort order) —
+// used by the Overview donut + leaderboard so a tool keeps the same color
+// everywhere on that page.
+const TOOL_PALETTE = [CHART_COLORS.primary, CHART_COLORS.secondary, CHART_COLORS.success, CHART_COLORS.warning, CHART_COLORS.danger];
+
+// Overview-only chart: composition, not comparison — "what share of all
+// activity does each tool represent." Analytics' All-Tools view has no
+// pie/donut at all, so this is a genuinely different question answered
+// in a genuinely different chart type, not a re-skinned duplicate.
+function ToolShareDonut({ tools }) {
+  if (!tools || tools.length === 0) return null;
+  const total = tools.reduce((sum, t) => sum + t.totalTestTakers, 0);
+  const data = tools.map((t, i) => ({ id: t.id, name: t.name, value: t.totalTestTakers, color: TOOL_PALETTE[i % TOOL_PALETTE.length] }));
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+      <div style={{ width: 150, height: 150, flexShrink: 0 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={data} dataKey="value" nameKey="name" innerRadius={44} outerRadius={70} paddingAngle={2} strokeWidth={0}>
+              {data.map(d => <Cell key={d.id} fill={d.color} />)}
+            </Pie>
+            <RTooltip
+              formatter={(value, name) => [`${value} (${total > 0 ? Math.round((value / total) * 100) : 0}%)`, name]}
+              contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <div style={{ flex: 1, minWidth: 170, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+        {data.map(d => (
+          <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', fontSize: '0.82rem' }}>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: d.color, flexShrink: 0 }} />
+            <span style={{ flex: 1, color: 'var(--text-secondary)' }}>{d.name}</span>
+            <strong style={{ color: 'var(--text-primary)' }}>{total > 0 ? Math.round((d.value / total) * 100) : 0}%</strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Overview-only chart: a compact ranked leaderboard combining volume AND
+// score into one glanceable row per tool, instead of Analytics' two
+// separate full-size bar-chart panels. Executive-summary style — rank,
+// name, a mini inline bar, and both numbers in one line.
+function TopToolsLeaderboard({ tools }) {
+  if (!tools || tools.length === 0) return null;
+  const ranked = [...tools].sort((a, b) => b.totalTestTakers - a.totalTestTakers);
+  const maxVol = Math.max(...ranked.map(t => t.totalTestTakers), 1);
+  const scoreColor = (pct) => (pct >= 85 ? CHART_COLORS.success : pct >= 60 ? CHART_COLORS.warning : CHART_COLORS.danger);
+
+  return (
+    <div className="leaderboard">
+      {ranked.map((t, i) => (
+        <div className="leaderboard-row" key={t.id}>
+          <span className="leaderboard-rank">{i + 1}</span>
+          <div className="leaderboard-main">
+            <div className="leaderboard-top">
+              <span className="leaderboard-name">{t.name}</span>
+              <span className="leaderboard-score" style={{ color: scoreColor(t.averageScorePercentage) }}>{t.averageScorePercentage}%</span>
+            </div>
+            <div className="leaderboard-track">
+              <div className="leaderboard-fill" style={{ width: `${(t.totalTestTakers / maxVol) * 100}%`, background: TOOL_PALETTE[i % TOOL_PALETTE.length] }} />
+            </div>
+          </div>
+          <span className="leaderboard-volume">{t.totalTestTakers}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const STATUS_COLOR = {
   healthy: CHART_COLORS.success,
   warning: CHART_COLORS.warning,
@@ -367,6 +440,29 @@ function StatusGrid({ healthData }) {
               <span className={`health-status-pill ${h.status}`}>{h.status}</span>
               <AvailabilityPill availability={h.availability} />
             </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Overview-only: a slim single-row status strip (dot + name only) instead
+// of Analytics' full status-card grid — enough to see "is everything green"
+// at a glance without the per-card latency/error detail, which belongs on
+// the deeper Analytics page, not the summary one.
+function StatusStrip({ healthData }) {
+  if (!healthData) return null;
+  return (
+    <div className="status-strip">
+      {Object.keys(healthData).map(dbId => {
+        const h = healthData[dbId];
+        const color = STATUS_COLOR[h.status] || CHART_COLORS.muted;
+        return (
+          <div className="status-chip" key={dbId}>
+            <span className="status-chip-dot" style={{ background: color, boxShadow: `0 0 0 3px ${color}22` }} />
+            <span className="status-chip-name">{h.name}</span>
+            <span className="status-chip-status" style={{ color }}>{h.status}</span>
           </div>
         );
       })}
@@ -1037,39 +1133,49 @@ function App() {
                   </div>
                 )}
 
-                {/* Usage trend */}
-                <div className="panel">
-                  <div className="panel-header">
-                    <h2>Assessment Activity Trend</h2>
-                    <div className="range-tabs">
-                      {TREND_RANGES.map(r => (
-                        <button
-                          key={r.key}
-                          className={`range-tab ${trendRange === r.key ? 'active' : ''}`}
-                          onClick={() => setTrendRange(r.key)}
-                        >
-                          {r.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {trendLoading ? (
-                    <div className="trend-chart-empty">Loading trend...</div>
-                  ) : (
-                    <TrendChart series={trendSeries} toolNames={toolNames} />
-                  )}
-                </div>
-
-                {/* Volume + Score comparison across tools */}
-                <ToolComparisonCharts tools={overviewData} />
-
-                {/* System Health + Attention Required, side by side */}
+                {/* Trend + tool-share donut, side by side — two different
+                    "big picture" questions (direction over time, and
+                    composition right now), not stacked full-width like
+                    Analytics does for the trend alone. */}
                 <div className="split-grid">
                   <div className="panel">
                     <div className="panel-header">
-                      <h2><HeartPulse size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />System Health</h2>
+                      <h2>Assessment Activity Trend</h2>
+                      <div className="range-tabs">
+                        {TREND_RANGES.map(r => (
+                          <button
+                            key={r.key}
+                            className={`range-tab ${trendRange === r.key ? 'active' : ''}`}
+                            onClick={() => setTrendRange(r.key)}
+                          >
+                            {r.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <StatusGrid healthData={healthData} />
+                    {trendLoading ? (
+                      <div className="trend-chart-empty">Loading trend...</div>
+                    ) : (
+                      <TrendChart series={trendSeries} toolNames={toolNames} />
+                    )}
+                  </div>
+
+                  <div className="panel">
+                    <div className="panel-header">
+                      <h2>Share of Assessments</h2>
+                    </div>
+                    <ToolShareDonut tools={overviewData} />
+                  </div>
+                </div>
+
+                {/* Top-tools leaderboard + Attention Required, side by side */}
+                <div className="split-grid">
+                  <div className="panel">
+                    <div className="panel-header">
+                      <h2>Top Performing Tools</h2>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Ranked by volume</span>
+                    </div>
+                    <TopToolsLeaderboard tools={overviewData} />
                   </div>
 
                   <div className="panel">
@@ -1091,6 +1197,14 @@ function App() {
                       {alertsData.length === 0 && <div className="trend-chart-empty">Loading alerts...</div>}
                     </div>
                   </div>
+                </div>
+
+                {/* Slim system-status strip — full detail lives on Analytics */}
+                <div className="panel">
+                  <div className="panel-header">
+                    <h2><HeartPulse size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />System Status</h2>
+                  </div>
+                  <StatusStrip healthData={healthData} />
                 </div>
 
                 {/* Per-tool cards — click through to manage candidates */}
