@@ -1108,6 +1108,26 @@ body {
   font-weight: 600;
 }
 
+/* Analytics tool-picker dropdown — deliberately its own class rather than
+   .form-control, which has a conflicting dark-theme definition scoped to
+   the auth screen elsewhere in this file. */
+.tool-select {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-family: inherit;
+  padding: 0.5rem 0.75rem;
+  transition: var(--transition-fast);
+}
+
+.tool-select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
 .trend-chart-empty {
   padding: 2.5rem 0;
   text-align: center;

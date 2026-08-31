@@ -536,6 +536,10 @@ function App() {
 
   // Analytics page: 'all' or a specific dbId to drill into
   const [analyticsTool, setAnalyticsTool] = useState('all');
+  // Category filter — narrows the tool dropdown to one category
+  // (e.g. AI Assessment, Psychometric) instead of listing every tool as
+  // its own tab. 'all' shows every tool in the dropdown, ungrouped.
+  const [analyticsCategory, setAnalyticsCategory] = useState('all');
 
   // Usage trend, live activity, alerts, system health, reports — all
   // live on the Analytics page now
@@ -1304,22 +1308,42 @@ function App() {
                 <h1>Analytics</h1>
                 <p>Usage, performance, and health monitoring across every assessment tool.</p>
               </div>
-              <div className="range-tabs" style={{ flexWrap: 'wrap' }}>
-                <button
-                  className={`range-tab ${analyticsTool === 'all' ? 'active' : ''}`}
-                  onClick={() => setAnalyticsTool('all')}
-                >
-                  All Tools
-                </button>
-                {overviewData.map(item => (
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div className="range-tabs" style={{ flexWrap: 'wrap' }}>
                   <button
-                    key={item.id}
-                    className={`range-tab ${analyticsTool === item.id ? 'active' : ''}`}
-                    onClick={() => setAnalyticsTool(item.id)}
+                    className={`range-tab ${analyticsTool === 'all' ? 'active' : ''}`}
+                    onClick={() => { setAnalyticsCategory('all'); setAnalyticsTool('all'); }}
                   >
-                    {item.name}
+                    All Tools
                   </button>
-                ))}
+                  {Array.from(new Set(overviewData.map(t => t.category || 'Uncategorized'))).map(cat => (
+                    <button
+                      key={cat}
+                      className={`range-tab ${analyticsCategory === cat ? 'active' : ''}`}
+                      onClick={() => {
+                        setAnalyticsCategory(cat);
+                        const firstInCategory = overviewData.find(t => (t.category || 'Uncategorized') === cat);
+                        if (firstInCategory) setAnalyticsTool(firstInCategory.id);
+                      }}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+                {analyticsCategory !== 'all' && (
+                  <select
+                    className="tool-select"
+                    style={{ minWidth: 220 }}
+                    value={analyticsTool}
+                    onChange={(e) => setAnalyticsTool(e.target.value)}
+                  >
+                    {overviewData
+                      .filter(t => (t.category || 'Uncategorized') === analyticsCategory)
+                      .map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                  </select>
+                )}
               </div>
             </div>
 
@@ -1449,7 +1473,7 @@ function App() {
                           const toolReports = reportsSummary && reportsSummary.byTool ? reportsSummary.byTool[item.id] : null;
                           const toolHealth = healthData ? healthData[item.id] : null;
                           return (
-                            <tr key={item.id} onClick={() => setAnalyticsTool(item.id)}>
+                            <tr key={item.id} onClick={() => { setAnalyticsCategory(item.category || 'Uncategorized'); setAnalyticsTool(item.id); }}>
                               <td>
                                 <div style={{ fontWeight: '600' }}>{item.name}</div>
                                 <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{item.description}</div>
@@ -1971,7 +1995,12 @@ function App() {
                 <span className={`mode-badge ${assessmentMode === 'live' ? 'live' : 'mock'}`}>
                   {assessmentMode} Connection
                 </span>
-                <button className="btn btn-secondary btn-sm" onClick={() => { setAnalyticsTool(currentView); setCurrentView('analytics'); }}>
+                <button className="btn btn-secondary btn-sm" onClick={() => {
+                  const tool = overviewData.find(t => t.id === currentView);
+                  setAnalyticsCategory((tool && tool.category) || 'Uncategorized');
+                  setAnalyticsTool(currentView);
+                  setCurrentView('analytics');
+                }}>
                   <BarChart3 size={14} /> View Analytics
                 </button>
               </div>
