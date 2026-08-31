@@ -65,6 +65,23 @@ const TREND_RANGES = [
   { key: '90d', label: '90 Days' }
 ];
 
+// AI-profile list items (strengths/blindSpots/improvements) are usually
+// plain strings, but some live tools return structured objects instead
+// (observed shape: { dim, action }) — rendering an object directly as a
+// React child crashes the page, so normalize whatever comes back to text.
+function renderProfileListItem(item) {
+  if (typeof item === 'string' || typeof item === 'number') return item;
+  if (item && typeof item === 'object') {
+    if (item.dim && item.action) return `${item.dim}: ${item.action}`;
+    if (item.action) return item.action;
+    if (item.dim) return item.dim;
+    const textValues = Object.values(item).filter(v => typeof v === 'string');
+    if (textValues.length > 0) return textValues.join(' — ');
+    return JSON.stringify(item);
+  }
+  return String(item);
+}
+
 // "2 min ago" / "3 hours ago" style relative time for the activity feed.
 function timeAgo(isoString) {
   const diffMs = Date.now() - new Date(isoString).getTime();
@@ -2069,7 +2086,7 @@ function App() {
                           const scoreClass = getScoreClass(c.score, c.maxScore);
                           const initials = c.name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
                           return (
-                            <tr key={c.id} onClick={() => handleSelectCandidate(c)}>
+                            <tr key={`${c.id}-${idx}`} onClick={() => handleSelectCandidate(c)}>
                               <td>
                                 <div className="table-tool-cell">
                                   <span className="candidate-avatar" style={{ background: TOOL_PALETTE[idx % TOOL_PALETTE.length] }}>
@@ -2258,7 +2275,7 @@ function App() {
                                 {(Array.isArray(candidateDetails.aiProfile.strengths)
                                   ? candidateDetails.aiProfile.strengths
                                   : [candidateDetails.aiProfile.strengths]
-                                ).map((s, i) => <li key={i}>{s}</li>)}
+                                ).map((s, i) => <li key={i}>{renderProfileListItem(s)}</li>)}
                               </ul>
                             </div>
                           )}
@@ -2269,7 +2286,7 @@ function App() {
                                 {(Array.isArray(candidateDetails.aiProfile.blindSpots)
                                   ? candidateDetails.aiProfile.blindSpots
                                   : [candidateDetails.aiProfile.blindSpots]
-                                ).map((s, i) => <li key={i}>{s}</li>)}
+                                ).map((s, i) => <li key={i}>{renderProfileListItem(s)}</li>)}
                               </ul>
                             </div>
                           )}
@@ -2282,7 +2299,7 @@ function App() {
                               {(Array.isArray(candidateDetails.aiProfile.improvements)
                                 ? candidateDetails.aiProfile.improvements
                                 : [candidateDetails.aiProfile.improvements]
-                              ).map((s, i) => <li key={i}>{s}</li>)}
+                              ).map((s, i) => <li key={i}>{renderProfileListItem(s)}</li>)}
                             </ul>
                           </div>
                         )}
