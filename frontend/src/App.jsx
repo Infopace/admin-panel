@@ -348,11 +348,15 @@ const TOOL_PALETTE = [CHART_COLORS.primary, CHART_COLORS.secondary, CHART_COLORS
 // tool-colored charts below it read as one palette, not two unrelated
 // color systems on the same page.
 const KPI_GRADIENTS = [
-  'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
-  'linear-gradient(135deg, #22d3ee 0%, #0e7490 100%)',
-  'linear-gradient(135deg, #34d399 0%, #047857 100%)',
-  'linear-gradient(135deg, #fb923c 0%, #b45309 100%)',
-  'linear-gradient(135deg, #fb7185 0%, #be123c 100%)'
+  'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)', // indigo
+  'linear-gradient(135deg, #22d3ee 0%, #0e7490 100%)', // cyan
+  'linear-gradient(135deg, #34d399 0%, #047857 100%)', // emerald
+  'linear-gradient(135deg, #fb923c 0%, #b45309 100%)', // amber
+  'linear-gradient(135deg, #fb7185 0%, #be123c 100%)', // rose
+  'linear-gradient(135deg, #a78bfa 0%, #6d28d9 100%)', // violet
+  'linear-gradient(135deg, #2dd4bf 0%, #0f766e 100%)', // teal
+  'linear-gradient(135deg, #e879f9 0%, #a21caf 100%)', // fuchsia
+  'linear-gradient(135deg, #38bdf8 0%, #0369a1 100%)'  // sky
 ];
 
 // Real weighted trend for Total Assessments only — it's a straight sum of
@@ -1449,10 +1453,10 @@ function App() {
                     <KpiCard icon={Database} gradient={KPI_GRADIENTS[2]} label="Live Connections" value={`${summaryData.liveToolsCount} / ${summaryData.totalTools}`} sub={`${summaryData.mockToolsCount} using mock data`} />
                     <KpiCard icon={FileCheck2} gradient={KPI_GRADIENTS[3]} label="Reports Generated" value={reportsSummary ? reportsSummary.totalGenerated : '—'} sub={reportsSummary ? `${reportsSummary.successRate}% success rate` : 'Loading...'} />
                     <KpiCard icon={RefreshCw} gradient={KPI_GRADIENTS[4]} label="Reports Pending" value={0} sub="Always 0 — generated synchronously, no queue exists" />
-                    <KpiCard icon={User} gradient={KPI_GRADIENTS[0]} label="Active Users" value={entitySummary ? entitySummary.totalUsers : '—'} sub="Across live-connected tools" />
-                    <KpiCard icon={BookOpen} gradient={KPI_GRADIENTS[1]} label="Active Organizations" value={entitySummary ? entitySummary.totalOrganizations : '—'} sub="Across live-connected tools" />
-                    <KpiCard icon={AlertCircle} gradient={KPI_GRADIENTS[2]} label="Failed Requests" value={healthData ? Object.values(healthData).reduce((sum, h) => sum + h.errors, 0) : '—'} sub="DB query errors, not assessment failures" />
-                    <KpiCard icon={Calendar} gradient={KPI_GRADIENTS[3]} label="Last Activity" value={<span style={{ fontSize: '1.15rem' }}>{summaryData.lastActivity ? new Date(summaryData.lastActivity).toLocaleString() : 'No activity yet'}</span>} sub="Most recent across tools" />
+                    <KpiCard icon={User} gradient={KPI_GRADIENTS[5]} label="Active Users" value={entitySummary ? entitySummary.totalUsers : '—'} sub="Across live-connected tools" />
+                    <KpiCard icon={BookOpen} gradient={KPI_GRADIENTS[6]} label="Active Organizations" value={entitySummary ? entitySummary.totalOrganizations : '—'} sub="Across live-connected tools" />
+                    <KpiCard icon={AlertCircle} gradient={KPI_GRADIENTS[7]} label="Failed Requests" value={healthData ? Object.values(healthData).reduce((sum, h) => sum + h.errors, 0) : '—'} sub="DB query errors, not assessment failures" />
+                    <KpiCard icon={Calendar} gradient={KPI_GRADIENTS[8]} label="Last Activity" value={<span style={{ fontSize: '1.15rem' }}>{summaryData.lastActivity ? new Date(summaryData.lastActivity).toLocaleString() : 'No activity yet'}</span>} sub="Most recent across tools" />
                   </div>
                 )}
 
