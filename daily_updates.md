@@ -11,6 +11,7 @@ Short, crisp log of what got built each day. Newest entry on top.
 - `started_at timestamptz` column added to db4's `submissions` table (ready for Time Monitoring) — stays empty until the assessment website is changed to populate it on submit
 - Installed Recharts and replaced the hand-rolled div/CSS charts with real ones: Usage Trend is now a gradient area chart (same per-tool tooltip breakdown on hover), Score Distribution is a donut, added two new "Volume by Tool" / "Avg Score by Tool" horizontal bar charts on the All-Tools Analytics view, and System Health is now a status-board grid (colored status dot + top accent bar per tool) instead of text-only cards
 - Verified all of the above by running the app end-to-end (backend + frontend + Playwright screenshots) rather than just building
+- Rebuilt the Overview (dashboard) page from a bare per-tool card grid into a condensed visual summary reusing the same chart components as Analytics: 5-card KPI strip, usage trend chart, Volume/Avg-Score-by-Tool bar charts, System Health status grid, and a 4-item Attention Required preview with a "View All" link into Analytics. Full depth (12-column table, live activity feed, org/user/dimension breakdowns) stays Analytics-only — Overview is summary + click-through, per the "30-second glance" console design discussed earlier
 
 ## 2026-08-28
 

@@ -554,10 +554,10 @@ function App() {
   }, [token]);
 
   // Analytics — cross-tool signals (health, alerts, report monitoring)
-  // fetched once whenever the Analytics page is opened; these aren't
-  // scoped per-tool, the alerts/health panels just filter client-side.
+  // fetched whenever Analytics OR the Overview dashboard is open — Overview
+  // shows a condensed version of the same charts, so it needs the same data.
   useEffect(() => {
-    if (!token || currentView !== 'analytics') return;
+    if (!token || (currentView !== 'analytics' && currentView !== 'overview')) return;
     const fetchAnalyticsCrossTool = async () => {
       try {
         const [healthRes, alertsRes, reportsRes, entitiesRes] = await Promise.all([
@@ -577,13 +577,15 @@ function App() {
     fetchAnalyticsCrossTool();
   }, [token, currentView]);
 
-  // Analytics — usage trend, scoped to the selected tool (or all tools).
+  // Usage trend — scoped to the selected tool on Analytics, always
+  // company-wide on the Overview dashboard.
   useEffect(() => {
-    if (!token || currentView !== 'analytics') return;
+    if (!token || (currentView !== 'analytics' && currentView !== 'overview')) return;
     const fetchTrend = async () => {
       setTrendLoading(true);
       try {
-        const dbParam = analyticsTool !== 'all' ? `&dbId=${analyticsTool}` : '';
+        const scopedTool = currentView === 'analytics' ? analyticsTool : 'all';
+        const dbParam = scopedTool !== 'all' ? `&dbId=${scopedTool}` : '';
         const res = await authFetch(`${API_BASE}/overview/trend?range=${trendRange}${dbParam}`);
         const data = await res.json();
         setTrendSeries(data.series || []);
@@ -966,13 +968,16 @@ function App() {
       {/* MAIN VIEW */}
       <main className="main-content">
 
-        {/* VIEW: OVERVIEW — lightweight landing page; deep monitoring lives on Analytics */}
+        {/* VIEW: OVERVIEW — the 30-second glance: condensed KPIs + charts,
+            reusing the same components as Analytics. Full depth (12-column
+            table, live activity feed, org/user/dimension breakdowns) stays
+            on Analytics only — this page is summary + click-through. */}
         {currentView === 'overview' && (
           <div>
             <div className="header-container">
               <div className="title-area">
                 <h1>Overview Portal</h1>
-                <p>Quick summary across all 5 databases — see Analytics for full monitoring.</p>
+                <p>Company-wide snapshot across all 5 tools — see Analytics for full monitoring.</p>
               </div>
               <div style={{ display: 'flex', gap: '0.75rem' }}>
                 <button className="btn btn-secondary btn-sm" onClick={loadInitialData}>
@@ -990,30 +995,131 @@ function App() {
                 Loading aggregated stats...
               </div>
             ) : (
-              <div className="stats-grid">
-                {overviewData.map((item, idx) => (
-                  <div
-                    className={`stat-card db${idx + 1}`}
-                    key={item.id}
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => setCurrentView(item.id)}
-                  >
-                    <div>
-                      <span className="stat-label">{item.name}</span>
-                      <div className="stat-value">{item.totalTestTakers}</div>
-                      <span className="stat-desc">Candidates — click to manage</span>
+              <>
+                {/* Top KPI strip — trimmed to the 5 most important numbers */}
+                {summaryData && (
+                  <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
+                    <div className="stat-card">
+                      <div>
+                        <span className="stat-label">Total Assessments</span>
+                        <div className="stat-value">{summaryData.totalAssessments}</div>
+                        <span className="stat-desc">Across all tools</span>
+                      </div>
                     </div>
-                    <div className="stat-icon">
-                      <Award size={20} color={`var(--accent-${idx === 0 ? 'primary' : idx === 1 ? 'secondary' : idx === 2 ? 'success' : idx === 3 ? 'warning' : 'danger'})`} />
+                    <div className="stat-card">
+                      <div>
+                        <span className="stat-label">Average Score</span>
+                        <div className="stat-value">{summaryData.averageScorePercentage}%</div>
+                        <span className="stat-desc">Weighted across tools</span>
+                      </div>
                     </div>
-                    <div style={{ position: 'absolute', bottom: 10, right: 15 }}>
-                      <span className={`score-badge ${getScoreClass(item.averageScorePercentage, 100)}`} style={{ fontSize: '0.7rem' }}>
-                        Avg: {item.averageScorePercentage}%
-                      </span>
+                    <div className="stat-card">
+                      <div>
+                        <span className="stat-label">Live Connections</span>
+                        <div className="stat-value">{summaryData.liveToolsCount} / {summaryData.totalTools}</div>
+                        <span className="stat-desc">{summaryData.mockToolsCount} using mock data</span>
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <div>
+                        <span className="stat-label">Reports Generated</span>
+                        <div className="stat-value">{reportsSummary ? reportsSummary.totalGenerated : '—'}</div>
+                        <span className="stat-desc">{reportsSummary ? `${reportsSummary.successRate}% success rate` : 'Loading...'}</span>
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <div>
+                        <span className="stat-label">Active Users</span>
+                        <div className="stat-value">{entitySummary ? entitySummary.totalUsers : '—'}</div>
+                        <span className="stat-desc">Across live-connected tools</span>
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
+                )}
+
+                {/* Usage trend */}
+                <div className="panel">
+                  <div className="panel-header">
+                    <h2>Assessment Activity Trend</h2>
+                    <div className="range-tabs">
+                      {TREND_RANGES.map(r => (
+                        <button
+                          key={r.key}
+                          className={`range-tab ${trendRange === r.key ? 'active' : ''}`}
+                          onClick={() => setTrendRange(r.key)}
+                        >
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {trendLoading ? (
+                    <div className="trend-chart-empty">Loading trend...</div>
+                  ) : (
+                    <TrendChart series={trendSeries} toolNames={toolNames} />
+                  )}
+                </div>
+
+                {/* Volume + Score comparison across tools */}
+                <ToolComparisonCharts tools={overviewData} />
+
+                {/* System Health + Attention Required, side by side */}
+                <div className="split-grid">
+                  <div className="panel">
+                    <div className="panel-header">
+                      <h2><HeartPulse size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />System Health</h2>
+                    </div>
+                    <StatusGrid healthData={healthData} />
+                  </div>
+
+                  <div className="panel">
+                    <div className="panel-header">
+                      <h2><AlertTriangle size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />Attention Required</h2>
+                      <button className="btn btn-secondary btn-sm" onClick={() => { setAnalyticsTool('all'); setCurrentView('analytics'); }}>
+                        View All
+                      </button>
+                    </div>
+                    <div className="alerts-list">
+                      {alertsData.slice(0, 4).map((alert, idx) => (
+                        <div className={`alert-item ${alert.severity}`} key={idx}>
+                          <div className="alert-item-body">
+                            {alert.tool && <strong>{alert.tool}</strong>}
+                            <span>{alert.message}</span>
+                          </div>
+                        </div>
+                      ))}
+                      {alertsData.length === 0 && <div className="trend-chart-empty">Loading alerts...</div>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Per-tool cards — click through to manage candidates */}
+                <h2 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '1rem' }}>Tools</h2>
+                <div className="stats-grid">
+                  {overviewData.map((item, idx) => (
+                    <div
+                      className={`stat-card db${idx + 1}`}
+                      key={item.id}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => setCurrentView(item.id)}
+                    >
+                      <div>
+                        <span className="stat-label">{item.name}</span>
+                        <div className="stat-value">{item.totalTestTakers}</div>
+                        <span className="stat-desc">Candidates — click to manage</span>
+                      </div>
+                      <div className="stat-icon">
+                        <Award size={20} color={`var(--accent-${idx === 0 ? 'primary' : idx === 1 ? 'secondary' : idx === 2 ? 'success' : idx === 3 ? 'warning' : 'danger'})`} />
+                      </div>
+                      <div style={{ position: 'absolute', bottom: 10, right: 15 }}>
+                        <span className={`score-badge ${getScoreClass(item.averageScorePercentage, 100)}`} style={{ fontSize: '0.7rem' }}>
+                          Avg: {item.averageScorePercentage}%
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         )}
