@@ -561,14 +561,45 @@ function StatusStrip({ healthData }) {
       {Object.keys(healthData).map(dbId => {
         const h = healthData[dbId];
         const color = STATUS_COLOR[h.status] || CHART_COLORS.muted;
+        const StatusIcon = h.status === 'healthy' ? Check : h.status === 'critical' ? AlertTriangle : h.status === 'warning' ? AlertCircle : HeartPulse;
         return (
           <div className="status-chip" key={dbId}>
-            <span className="status-chip-dot" style={{ background: color, boxShadow: `0 0 0 3px ${color}22` }} />
+            <span className="status-chip-icon" style={{ background: color }}><StatusIcon size={12} /></span>
             <span className="status-chip-name">{h.name}</span>
             <span className="status-chip-status" style={{ color }}>{h.status}</span>
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// A small colored circle around a panel-header icon — the "icon badge"
+// visual language carried through from the KPI cards, so headers don't
+// revert to plain black icons once you scroll past the top row.
+function PanelIconBadge({ icon: Icon, color }) {
+  return (
+    <span className="panel-icon-badge" style={{ background: color }}>
+      <Icon size={13} />
+    </span>
+  );
+}
+
+const SEVERITY_COLOR = { critical: CHART_COLORS.danger, warning: CHART_COLORS.warning, info: CHART_COLORS.secondary, ok: CHART_COLORS.success };
+
+// Overview-only alert row — a colored severity icon instead of relying
+// only on background tint, matching the icon-badge language used
+// everywhere else on this page. Analytics keeps its own plain alert-item
+// style untouched.
+function AlertRow({ alert }) {
+  const color = SEVERITY_COLOR[alert.severity] || CHART_COLORS.muted;
+  return (
+    <div className="alert-row">
+      <span className="alert-row-icon" style={{ background: color }}><AlertTriangle size={13} /></span>
+      <div className="alert-row-body">
+        {alert.tool && <strong>{alert.tool}</strong>}
+        <span>{alert.message}</span>
+      </div>
     </div>
   );
 }
@@ -1250,7 +1281,7 @@ function App() {
                 <div className="split-grid">
                   <div className="panel">
                     <div className="panel-header">
-                      <h2>Assessment Activity Trend</h2>
+                      <h2><PanelIconBadge icon={TrendingUp} color={CHART_COLORS.primary} />Assessment Activity Trend</h2>
                       <div className="range-tabs">
                         {TREND_RANGES.map(r => (
                           <button
@@ -1272,7 +1303,7 @@ function App() {
 
                   <div className="panel">
                     <div className="panel-header">
-                      <h2>Share of Assessments</h2>
+                      <h2><PanelIconBadge icon={Database} color={CHART_COLORS.secondary} />Share of Assessments</h2>
                     </div>
                     <ToolShareDonut tools={overviewData} />
                   </div>
@@ -1283,14 +1314,14 @@ function App() {
                 <div className="split-grid">
                   <div className="panel">
                     <div className="panel-header">
-                      <h2>Score Composition by Tool</h2>
+                      <h2><PanelIconBadge icon={BarChart3} color={CHART_COLORS.warning} />Score Composition by Tool</h2>
                     </div>
                     <ScoreDistributionStackedChart tools={overviewData} />
                   </div>
 
                   <div className="panel">
                     <div className="panel-header">
-                      <h2>Average Score</h2>
+                      <h2><PanelIconBadge icon={Award} color={CHART_COLORS.danger} />Average Score</h2>
                     </div>
                     <AvgScoreRadial tools={overviewData} />
                   </div>
@@ -1299,20 +1330,13 @@ function App() {
                 {/* Attention Required */}
                 <div className="panel">
                   <div className="panel-header">
-                    <h2><AlertTriangle size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />Attention Required</h2>
+                    <h2><PanelIconBadge icon={AlertTriangle} color={CHART_COLORS.warning} />Attention Required</h2>
                     <button className="btn btn-secondary btn-sm" onClick={() => { setAnalyticsTool('all'); setCurrentView('analytics'); }}>
                       View All
                     </button>
                   </div>
                   <div className="alerts-list">
-                    {alertsData.slice(0, 4).map((alert, idx) => (
-                      <div className={`alert-item ${alert.severity}`} key={idx}>
-                        <div className="alert-item-body">
-                          {alert.tool && <strong>{alert.tool}</strong>}
-                          <span>{alert.message}</span>
-                        </div>
-                      </div>
-                    ))}
+                    {alertsData.slice(0, 4).map((alert, idx) => <AlertRow alert={alert} key={idx} />)}
                     {alertsData.length === 0 && <div className="trend-chart-empty">Loading alerts...</div>}
                   </div>
                 </div>
@@ -1320,7 +1344,7 @@ function App() {
                 {/* Slim system-status strip — full detail lives on Analytics */}
                 <div className="panel">
                   <div className="panel-header">
-                    <h2><HeartPulse size={16} style={{ verticalAlign: '-2px', marginRight: '0.4rem' }} />System Status</h2>
+                    <h2><PanelIconBadge icon={HeartPulse} color={CHART_COLORS.success} />System Status</h2>
                   </div>
                   <StatusStrip healthData={healthData} />
                 </div>
@@ -1340,8 +1364,8 @@ function App() {
                         <div className="stat-value">{item.totalTestTakers}</div>
                         <span className="stat-desc">Candidates — click to manage</span>
                       </div>
-                      <div className="stat-icon">
-                        <Award size={20} color={`var(--accent-${idx === 0 ? 'primary' : idx === 1 ? 'secondary' : idx === 2 ? 'success' : idx === 3 ? 'warning' : 'danger'})`} />
+                      <div className="stat-icon" style={{ background: TOOL_PALETTE[idx % TOOL_PALETTE.length] }}>
+                        <Database size={17} color="#ffffff" />
                       </div>
                       <div style={{ position: 'absolute', bottom: 10, right: 15 }}>
                         <span className={`score-badge ${getScoreClass(item.averageScorePercentage, 100)}`} style={{ fontSize: '0.7rem' }}>
