@@ -387,7 +387,7 @@ function KpiCard({ icon: Icon, gradient, label, value, sub, trend }) {
       <div className="kpi-card-value">{value}</div>
       <div className="kpi-card-footer">
         {trend && (
-          <span className="kpi-card-trend">
+          <span className={`kpi-card-trend ${trend.direction}`}>
             {trend.direction === 'up' ? <TrendingUp size={12} /> : trend.direction === 'down' ? <TrendingDown size={12} /> : <Minus size={12} />}
             {Math.abs(trend.changePercent)}%
           </span>

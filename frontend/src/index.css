@@ -1248,10 +1248,23 @@ body {
   gap: 0.2rem;
   padding: 0.1rem 0.45rem;
   border-radius: 999px;
-  background-color: rgba(255, 255, 255, 0.22);
   font-weight: 700;
   color: #ffffff;
   flex-shrink: 0;
+}
+
+/* Direction actually changes color here, not just the arrow icon —
+   same translucent-white pill read as identical for up vs. down */
+.kpi-card-trend.up {
+  background-color: rgba(22, 163, 74, 0.85);
+}
+
+.kpi-card-trend.down {
+  background-color: rgba(220, 38, 38, 0.85);
+}
+
+.kpi-card-trend.flat {
+  background-color: rgba(255, 255, 255, 0.22);
 }
 
 .trend-chart-empty {
