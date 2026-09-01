@@ -1542,8 +1542,29 @@ body {
 /* KPI gradient cards (Overview) */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  /* Fixed track width (not 1fr) — a category with only one or two cards
+     keeps them their normal compact size instead of stretching to fill
+     the whole row. */
+  grid-template-columns: repeat(auto-fill, 230px);
   gap: 1.25rem;
+}
+
+/* KPI category grouping — same taxonomy on Overview and Analytics so a
+   flat row of unrelated tiles reads as organized sections instead. */
+.kpi-category {
+  margin-bottom: 1.75rem;
+}
+
+.kpi-category-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
 }
 
 /* Professional/restrained KPI tile: the neutral neomorphic surface every

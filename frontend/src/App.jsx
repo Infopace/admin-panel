@@ -500,6 +500,29 @@ function KpiCard({ icon: Icon, gradient, label, value, sub, trend }) {
   );
 }
 
+// Shared KPI taxonomy for Overview + Analytics — same five category
+// labels on both pages (Overview just has fewer cards per category)
+// so the two read as one system instead of two unrelated layouts.
+// Purely a rendering grouping; doesn't touch what data each card shows.
+const KPI_CATEGORIES = {
+  volume: { label: 'Volume & Activity', icon: BarChart3 },
+  quality: { label: 'Quality', icon: Award },
+  engagement: { label: 'Engagement & Retention', icon: User },
+  reports: { label: 'Reports', icon: FileCheck2 },
+  system: { label: 'System', icon: Database }
+};
+
+function KpiCategory({ categoryKey, children }) {
+  const meta = KPI_CATEGORIES[categoryKey];
+  const Icon = meta.icon;
+  return (
+    <div className="kpi-category">
+      <div className="kpi-category-label"><Icon size={13} />{meta.label}</div>
+      <div className="kpi-grid">{children}</div>
+    </div>
+  );
+}
+
 // Overview-only chart: composition, not comparison — "what share of all
 // activity does each tool represent." Analytics' All-Tools view has no
 // pie/donut at all, so this is a genuinely different question answered
@@ -1836,44 +1859,54 @@ function App() {
                     numbers. Trend badge only on Total Assessments, the one
                     metric with real day-over-day data behind it. */}
                 {summaryData && (
-                  <div className="kpi-grid" style={{ marginBottom: '1.5rem' }}>
-                    <KpiCard
-                      icon={BarChart3}
-                      gradient={KPI_GRADIENTS[0]}
-                      label="Total Assessments"
-                      value={summaryData.totalAssessments}
-                      sub="Across all tools"
-                      trend={aggregateVolumeTrend(overviewData)}
-                    />
-                    <KpiCard
-                      icon={Award}
-                      gradient={KPI_GRADIENTS[1]}
-                      label="Average Score"
-                      value={`${summaryData.averageScorePercentage}%`}
-                      sub="Weighted across tools"
-                    />
-                    <KpiCard
-                      icon={Database}
-                      gradient={KPI_GRADIENTS[2]}
-                      label="Live Connections"
-                      value={`${summaryData.liveToolsCount} / ${summaryData.totalTools}`}
-                      sub={`${summaryData.mockToolsCount} using mock data`}
-                    />
-                    <KpiCard
-                      icon={FileCheck2}
-                      gradient={KPI_GRADIENTS[3]}
-                      label="Reports Generated"
-                      value={reportsSummary ? reportsSummary.totalGenerated : '—'}
-                      sub={reportsSummary ? `${reportsSummary.successRate}% success rate` : 'Loading...'}
-                    />
-                    <KpiCard
-                      icon={User}
-                      gradient={KPI_GRADIENTS[4]}
-                      label="Active Users (30d)"
-                      value={entitySummary ? entitySummary.activeUsers30d : '—'}
-                      sub={entitySummary ? `${entitySummary.totalUsers} unique all-time` : 'Loading...'}
-                    />
-                  </div>
+                  <>
+                    <KpiCategory categoryKey="volume">
+                      <KpiCard
+                        icon={BarChart3}
+                        gradient={KPI_GRADIENTS[0]}
+                        label="Total Assessments"
+                        value={summaryData.totalAssessments}
+                        sub="Across all tools"
+                        trend={aggregateVolumeTrend(overviewData)}
+                      />
+                    </KpiCategory>
+                    <KpiCategory categoryKey="quality">
+                      <KpiCard
+                        icon={Award}
+                        gradient={KPI_GRADIENTS[1]}
+                        label="Average Score"
+                        value={`${summaryData.averageScorePercentage}%`}
+                        sub="Weighted across tools"
+                      />
+                    </KpiCategory>
+                    <KpiCategory categoryKey="engagement">
+                      <KpiCard
+                        icon={User}
+                        gradient={KPI_GRADIENTS[4]}
+                        label="Active Users (30d)"
+                        value={entitySummary ? entitySummary.activeUsers30d : '—'}
+                        sub={entitySummary ? `${entitySummary.totalUsers} unique all-time` : 'Loading...'}
+                      />
+                    </KpiCategory>
+                    <KpiCategory categoryKey="reports">
+                      <KpiCard
+                        icon={FileCheck2}
+                        gradient={KPI_GRADIENTS[3]}
+                        label="Reports Generated"
+                        value={reportsSummary ? reportsSummary.totalGenerated : '—'}
+                        sub={reportsSummary ? `${reportsSummary.successRate}% success rate` : 'Loading...'}
+                      />
+                    </KpiCategory>
+                    <KpiCategory categoryKey="system">
+                      <KpiCard
+                        icon={Database}
+                        gradient={KPI_GRADIENTS[2]}
+                        label="Live Connections"
+                        value={`${summaryData.liveToolsCount} / ${summaryData.totalTools}`}
+                        sub={`${summaryData.mockToolsCount} using mock data`}
+                      />
+                    </KpiCategory>
+                  </>
                 )}
 
                 {/* Trend + tool-share donut, side by side — two different
@@ -2050,24 +2083,34 @@ function App() {
                     across 9 cards. Trend badge only where real, same rule
                     as Overview's KPI row. */}
                 {summaryData && (
-                  <div className="kpi-grid" style={{ marginBottom: '1.5rem' }}>
-                    <KpiCard icon={BarChart3} gradient={KPI_GRADIENTS[0]} label="Total / Completed Assessments" value={summaryData.totalAssessments} sub="Across all tools — completed only" trend={aggregateVolumeTrend(overviewData)} />
-                    <KpiCard icon={Award} gradient={KPI_GRADIENTS[1]} label="Average Score" value={`${summaryData.averageScorePercentage}%`} sub="Weighted across tools" />
-                    <KpiCard icon={Database} gradient={KPI_GRADIENTS[2]} label="Live Connections" value={`${summaryData.liveToolsCount} / ${summaryData.totalTools}`} sub={`${summaryData.mockToolsCount} using mock data`} />
-                    <KpiCard icon={FileCheck2} gradient={KPI_GRADIENTS[3]} label="Reports Generated" value={reportsSummary ? reportsSummary.totalGenerated : '—'} sub={reportsSummary ? `${reportsSummary.successRate}% success rate` : 'Loading...'} />
-                    <KpiCard icon={RefreshCw} gradient={KPI_GRADIENTS[4]} label="Reports Pending" value={0} sub="Always 0 — generated synchronously, no queue exists" />
-                    <KpiCard icon={User} gradient={KPI_GRADIENTS[5]} label="Active Users (30d)" value={entitySummary ? entitySummary.activeUsers30d : '—'} sub={entitySummary ? `${entitySummary.totalUsers} unique all-time` : 'Loading...'} />
-                    <KpiCard icon={BookOpen} gradient={KPI_GRADIENTS[6]} label="Active Organizations (30d)" value={entitySummary ? entitySummary.activeOrgs30d : '—'} sub={entitySummary ? `${entitySummary.totalOrganizations} unique all-time` : 'Loading...'} />
-                    <KpiCard icon={AlertCircle} gradient={KPI_GRADIENTS[7]} label="Failed Requests" value={healthData ? Object.values(healthData).reduce((sum, h) => sum + h.errors, 0) : '—'} sub="DB query errors, not assessment failures" />
-                    <KpiCard icon={Calendar} gradient={KPI_GRADIENTS[8]} label="Last Activity" value={<span style={{ fontSize: '1.15rem' }}>{summaryData.lastActivity ? new Date(summaryData.lastActivity).toLocaleString() : 'No activity yet'}</span>} sub="Most recent across tools" />
-                    <KpiCard
-                      icon={RefreshCw}
-                      gradient={KPI_GRADIENTS[0]}
-                      label="D30 Repeat-Assessment Rate"
-                      value={entitySummary && entitySummary.retention ? `${entitySummary.retention.d30Pct}%` : 'N/A'}
-                      sub={entitySummary && entitySummary.retention ? `of ${entitySummary.retention.cohortSize} tracked users came back within 30 days` : 'No tool with a stable user id has live data yet'}
-                    />
-                  </div>
+                  <>
+                    <KpiCategory categoryKey="volume">
+                      <KpiCard icon={BarChart3} gradient={KPI_GRADIENTS[0]} label="Total / Completed Assessments" value={summaryData.totalAssessments} sub="Across all tools — completed only" trend={aggregateVolumeTrend(overviewData)} />
+                      <KpiCard icon={Calendar} gradient={KPI_GRADIENTS[8]} label="Last Activity" value={<span style={{ fontSize: '1.15rem' }}>{summaryData.lastActivity ? new Date(summaryData.lastActivity).toLocaleString() : 'No activity yet'}</span>} sub="Most recent across tools" />
+                    </KpiCategory>
+                    <KpiCategory categoryKey="quality">
+                      <KpiCard icon={Award} gradient={KPI_GRADIENTS[1]} label="Average Score" value={`${summaryData.averageScorePercentage}%`} sub="Weighted across tools" />
+                    </KpiCategory>
+                    <KpiCategory categoryKey="engagement">
+                      <KpiCard icon={User} gradient={KPI_GRADIENTS[5]} label="Active Users (30d)" value={entitySummary ? entitySummary.activeUsers30d : '—'} sub={entitySummary ? `${entitySummary.totalUsers} unique all-time` : 'Loading...'} />
+                      <KpiCard icon={BookOpen} gradient={KPI_GRADIENTS[6]} label="Active Organizations (30d)" value={entitySummary ? entitySummary.activeOrgs30d : '—'} sub={entitySummary ? `${entitySummary.totalOrganizations} unique all-time` : 'Loading...'} />
+                      <KpiCard
+                        icon={RefreshCw}
+                        gradient={KPI_GRADIENTS[0]}
+                        label="D30 Repeat-Assessment Rate"
+                        value={entitySummary && entitySummary.retention ? `${entitySummary.retention.d30Pct}%` : 'N/A'}
+                        sub={entitySummary && entitySummary.retention ? `of ${entitySummary.retention.cohortSize} tracked users came back within 30 days` : 'No tool with a stable user id has live data yet'}
+                      />
+                    </KpiCategory>
+                    <KpiCategory categoryKey="reports">
+                      <KpiCard icon={FileCheck2} gradient={KPI_GRADIENTS[3]} label="Reports Generated" value={reportsSummary ? reportsSummary.totalGenerated : '—'} sub={reportsSummary ? `${reportsSummary.successRate}% success rate` : 'Loading...'} />
+                      <KpiCard icon={RefreshCw} gradient={KPI_GRADIENTS[4]} label="Reports Pending" value={0} sub="Always 0 — generated synchronously, no queue exists" />
+                    </KpiCategory>
+                    <KpiCategory categoryKey="system">
+                      <KpiCard icon={Database} gradient={KPI_GRADIENTS[2]} label="Live Connections" value={`${summaryData.liveToolsCount} / ${summaryData.totalTools}`} sub={`${summaryData.mockToolsCount} using mock data`} />
+                      <KpiCard icon={AlertCircle} gradient={KPI_GRADIENTS[7]} label="Failed Requests" value={healthData ? Object.values(healthData).reduce((sum, h) => sum + h.errors, 0) : '—'} sub="DB query errors, not assessment failures" />
+                    </KpiCategory>
+                  </>
                 )}
 
                 {/* Usage Activity Trend (doc section 3) */}
