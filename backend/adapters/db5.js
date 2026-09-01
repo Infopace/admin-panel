@@ -309,47 +309,17 @@ async function getRetentionCohort(supabase) {
 }
 
 /**
- * Payment monitoring — CONFIRMED WRONG against the live schema, same
- * outcome as db2.js: a production run logged "column assessments.paid
- * does not exist." Every other field this adapter reads from
- * `assessments` (score, rating, domain_scores, flags,
- * polycrisis_triggered, high_risk_count, created_at) was confirmed via
- * schema audit — "paid" was a guess, and the guess was wrong. Fails
- * safe (both callers already catch this and fall back to "no payment
- * data"), but the real column — if one exists at all — is still
- * unknown. Run `node schema-audit.js` against a live SUPABASE_URL_5/
- * KEY_5 (it now checks payment-like columns too) and update the
- * .select() below to match.
+ * Payment monitoring — NOT SUPPORTED. A live schema audit (`node
+ * schema-audit.js`) confirmed `assessments` has exactly: id, user_id,
+ * score, rating, domain_scores, flags, polycrisis_triggered,
+ * high_risk_count, created_at, updated_at, result_json, metadata_json,
+ * dashboard_image_url — no paid/payment column anywhere. An earlier
+ * guess at a "paid" boolean (the db4/db6 convention) was wrong for
+ * exactly that reason, not just misnamed. result_json/metadata_json are
+ * JSON columns schema-audit.js can now peek into (it prints nested keys
+ * from a sample row) — check there before assuming payment isn't
+ * tracked for this tool at all.
  */
-function isPaidValue(v) {
-  return v === true || v === 'true' || v === 1 || v === '1';
-}
-
-async function getPaymentSummary(supabase) {
-  const { data, error } = await supabase
-    .from(TABLES.ASSESSMENTS)
-    .select('paid');
-
-  if (error) throw error;
-
-  let paidCount = 0;
-  let unpaidCount = 0;
-  data.forEach(row => {
-    isPaidValue(row.paid) ? paidCount++ : unpaidCount++;
-  });
-
-  const total = paidCount + unpaidCount;
-  return {
-    hasRevenueAmount: false,
-    paidCount,
-    unpaidCount,
-    paymentRate: total > 0 ? Math.round((paidCount / total) * 100) : 0
-  };
-}
-
-function getMockPaymentSummary() {
-  return { hasRevenueAmount: false, paidCount: 2, unpaidCount: 1, paymentRate: 67 };
-}
 
 module.exports = {
   getCandidates,
@@ -359,8 +329,6 @@ module.exports = {
   getUserBreakdown,
   getOrgBreakdown,
   getRetentionCohort,
-  getPaymentSummary,
-  getMockPaymentSummary,
   metadata: {
     name: 'Venture Risk Assessment',
     category: 'AI Assessment',

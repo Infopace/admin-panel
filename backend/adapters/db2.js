@@ -209,54 +209,22 @@ function getMockCandidateDetails(candidateId) {
 }
 
 /**
- * Payment monitoring — CONFIRMED WRONG against the live schema: a
- * production run logged "column sessions.paid does not exist" on every
- * call. This guessed a top-level "paid" boolean, the db4/db6 convention,
- * without a schema audit to back it up — that guess didn't hold here.
- * Fails safe (the /payments endpoint and tool-scoring already catch this
- * and fall back to "no payment data" instead of crashing), but the real
- * column name is still unknown — it may live inside founder_a/founder_b's
- * JSONB instead of on the row directly. Run `node schema-audit.js`
- * against a live SUPABASE_URL_2/KEY_2 (it now checks payment-like
- * columns too) and update the .select() below to match.
+ * Payment monitoring — NOT SUPPORTED. A live schema audit (`node
+ * schema-audit.js`) confirmed the `sessions` table has exactly four
+ * columns — id, founder_a, founder_b, created_at — and no top-level
+ * paid/payment column exists at all. An earlier guess at a "paid"
+ * boolean (the db4/db6 convention) was wrong for exactly this reason,
+ * not just misnamed. If payment status is tracked anywhere for this
+ * tool, it would have to live inside founder_a/founder_b's JSONB —
+ * schema-audit.js now also prints the nested keys of JSON columns from
+ * a sample row, so re-run it and check there before adding this back.
  */
-function isPaidValue(v) {
-  return v === true || v === 'true' || v === 1 || v === '1';
-}
-
-async function getPaymentSummary(supabase) {
-  const { data, error } = await supabase
-    .from(TABLES.SESSIONS)
-    .select('paid');
-
-  if (error) throw error;
-
-  let paidCount = 0;
-  let unpaidCount = 0;
-  data.forEach(row => {
-    isPaidValue(row.paid) ? paidCount++ : unpaidCount++;
-  });
-
-  const total = paidCount + unpaidCount;
-  return {
-    hasRevenueAmount: false,
-    paidCount,
-    unpaidCount,
-    paymentRate: total > 0 ? Math.round((paidCount / total) * 100) : 0
-  };
-}
-
-function getMockPaymentSummary() {
-  return { hasRevenueAmount: false, paidCount: 2, unpaidCount: 1, paymentRate: 67 };
-}
 
 module.exports = {
   getCandidates,
   getCandidateDetails,
   getMockCandidates,
   getMockCandidateDetails,
-  getPaymentSummary,
-  getMockPaymentSummary,
   metadata: {
     name: 'Founder and Co-founder Compatibility',
     category: 'AI Assessment',

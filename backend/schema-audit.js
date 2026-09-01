@@ -58,6 +58,27 @@ function findMatches(columns, keywords) {
     );
 }
 
+// PostgREST (what Supabase's REST API runs on) serves an OpenAPI doc at
+// its root listing every table it exposes — asking it directly beats
+// guessing a second table name after the first guess was wrong (db6's
+// "submissions" wasn't it). Best-effort: returns null on any failure so
+// a working audit never breaks because this extra probe didn't work.
+async function listAvailableTables(url, key) {
+    try {
+        const res = await fetch(`${url}/rest/v1/`, {
+            headers: { apikey: key, Authorization: `Bearer ${key}` }
+        });
+        if (!res.ok) return null;
+        const spec = await res.json();
+        if (!spec.paths) return null;
+        return Object.keys(spec.paths)
+            .map(p => p.replace(/^\//, ''))
+            .filter(p => p && !p.startsWith('rpc/'));
+    } catch (err) {
+        return null;
+    }
+}
+
 async function auditTool({ dbId, name, table }) {
     const url = process.env[`SUPABASE_URL_${dbId.slice(2)}`];
     const key = process.env[`SUPABASE_KEY_${dbId.slice(2)}`];
@@ -76,6 +97,13 @@ async function auditTool({ dbId, name, table }) {
     if (error) {
         console.log(`  ERROR querying "${table}": ${error.message}`);
         console.log('  -> Table name may differ from what the adapter expects, or credentials lack access.');
+        const available = await listAvailableTables(url, key);
+        if (available && available.length > 0) {
+            console.log(`  Tables this project actually exposes: ${available.join(', ')}`);
+            console.log(`  -> Update the "table:" guess for ${dbId} above to whichever of these is right, then re-run.`);
+        } else {
+            console.log('  Could not list available tables either — check the table name directly in Supabase Studio.');
+        }
         return { dbId, name, table, configured: true, error: error.message };
     }
 
@@ -94,6 +122,19 @@ async function auditTool({ dbId, name, table }) {
     const paymentCols = findMatches(columns, KEYWORDS.payment);
 
     console.log(`  All columns: ${columns.join(', ')}`);
+
+    // JSONB columns (e.g. db2's founder_a/founder_b) hide their real
+    // fields from a plain column list — a payment flag could easily live
+    // inside one instead of on the row directly. Print the nested keys of
+    // any object-valued column from this same sample row so that's not a
+    // dead end.
+    columns.forEach(col => {
+        const val = data[0][col];
+        if (val && typeof val === 'object' && !Array.isArray(val)) {
+            console.log(`  "${col}" is a JSON object — nested keys: ${Object.keys(val).join(', ') || '(empty)'}`);
+        }
+    });
+
     console.log(`  Status-like column(s):      ${statusCols.length ? statusCols.join(', ') : 'NONE FOUND'}`);
     console.log(`  Start-timestamp column(s):  ${startedCols.length ? startedCols.join(', ') : 'NONE FOUND'}`);
     console.log(`  Completion-timestamp col(s):${completedCols.length ? completedCols.join(', ') : 'NONE FOUND'}`);
