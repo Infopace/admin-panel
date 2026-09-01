@@ -309,17 +309,17 @@ async function getRetentionCohort(supabase) {
 }
 
 /**
- * Payment monitoring — UNVERIFIED against the live schema, same caveat
- * as db2.js: no SUPABASE_URL_5/KEY_5 configured in this environment to
- * confirm the real column name. Guesses a top-level "paid" boolean on
- * the assessments table, the db4/db6 convention. Every field this
- * adapter's other functions already read from `assessments` (score,
- * rating, domain_scores, flags, polycrisis_triggered, high_risk_count,
- * created_at) was confirmed via schema audit — "paid" was not, so treat
- * this as a guess to verify, not a confirmed column. Fails safe: if the
- * column doesn't exist, this throws on first live call and both callers
- * (the /payments endpoint and tool-scoring) already catch that and fall
- * back to "no payment data" instead of crashing.
+ * Payment monitoring — CONFIRMED WRONG against the live schema, same
+ * outcome as db2.js: a production run logged "column assessments.paid
+ * does not exist." Every other field this adapter reads from
+ * `assessments` (score, rating, domain_scores, flags,
+ * polycrisis_triggered, high_risk_count, created_at) was confirmed via
+ * schema audit — "paid" was a guess, and the guess was wrong. Fails
+ * safe (both callers already catch this and fall back to "no payment
+ * data"), but the real column — if one exists at all — is still
+ * unknown. Run `node schema-audit.js` against a live SUPABASE_URL_5/
+ * KEY_5 (it now checks payment-like columns too) and update the
+ * .select() below to match.
  */
 function isPaidValue(v) {
   return v === true || v === 'true' || v === 1 || v === '1';
