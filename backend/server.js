@@ -764,7 +764,7 @@ app.get('/api/tool-performance', async (req, res) => {
 // verified identity match — the same caveat /api/overview/entities notes.
 app.get('/api/org-breadth', async (req, res) => {
   try {
-    const orgToolCount = {}; // org name -> Set of dbIds it appears in
+    const orgDetail = {}; // org name -> { tools: Set<dbId>, totalAssessments, lastActivity }
 
     for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5', 'db6']) {
       const adapter = ADAPTERS[dbId];
@@ -776,15 +776,23 @@ app.get('/api/org-breadth', async (req, res) => {
         for (const org of orgs) {
           const key = (org.organization || '').trim();
           if (!key || key.toLowerCase() === 'unassigned') continue;
-          if (!orgToolCount[key]) orgToolCount[key] = new Set();
-          orgToolCount[key].add(dbId);
+          if (!orgDetail[key]) orgDetail[key] = { tools: new Set(), totalAssessments: 0, lastActivity: null };
+          orgDetail[key].tools.add(dbId);
+          orgDetail[key].totalAssessments += org.totalAssessments || 0;
+          if (org.lastActivity) {
+            const d = new Date(org.lastActivity);
+            if (!orgDetail[key].lastActivity || d > new Date(orgDetail[key].lastActivity)) {
+              orgDetail[key].lastActivity = org.lastActivity;
+            }
+          }
         }
       } catch (err) {
         console.warn(`getOrgBreakdown failed for ${dbId} during org-breadth check:`, err.message);
       }
     }
 
-    const counts = Object.values(orgToolCount).map(set => set.size);
+    const entries = Object.entries(orgDetail);
+    const counts = entries.map(([, v]) => v.tools.size);
     const totalOrgs = counts.length;
     const distribution = [1, 2, 3, 4, 5, 6].map(n => {
       const orgCount = counts.filter(c => c === n).length;
@@ -794,7 +802,20 @@ app.get('/api/org-breadth', async (req, res) => {
     const lowUsageOrgCount = counts.filter(c => c <= 2).length;
     const lowUsagePercentage = totalOrgs > 0 ? Math.round((lowUsageOrgCount / totalOrgs) * 100) : 0;
 
-    res.json({ totalOrgs, distribution, lowUsagePercentage });
+    // Top organizations by tool adoption depth (ties broken by volume) —
+    // the concrete "who" behind the aggregate distribution above, capped
+    // so the panel doesn't turn into an unbounded list.
+    const topOrgs = entries
+      .map(([organization, v]) => ({
+        organization,
+        toolsUsed: v.tools.size,
+        totalAssessments: v.totalAssessments,
+        lastActivity: v.lastActivity
+      }))
+      .sort((a, b) => b.toolsUsed - a.toolsUsed || b.totalAssessments - a.totalAssessments)
+      .slice(0, 15);
+
+    res.json({ totalOrgs, distribution, lowUsagePercentage, topOrgs });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

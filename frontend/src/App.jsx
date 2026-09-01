@@ -585,7 +585,7 @@ function ScoreDistributionStackedChart({ tools }) {
           <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} />
           <RTooltip
             formatter={(value, name) => [`${value}%`, name]}
-            contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
+            contentStyle={{ background: 'var(--bg-surface)', border: 'none', borderRadius: 12, fontSize: 12, boxShadow: '6px 6px 14px rgba(163,177,198,0.5), -6px -6px 14px rgba(255,255,255,0.85)' }}
           />
           <Bar dataKey="Low" stackId="s" fill={SCORE_BAND_COLORS.low} barSize={16} radius={[4, 0, 0, 4]} />
           <Bar dataKey="Medium" stackId="s" fill={SCORE_BAND_COLORS.medium} barSize={16} />
@@ -736,8 +736,11 @@ const TIER_META = {
   review: { label: 'Review', color: CHART_COLORS.danger, icon: AlertTriangle, blurb: 'Needs a look' }
 };
 
-function ToolTierBoard({ tools }) {
+function ToolTierBoard({ tools, overviewData, onSelectTool }) {
   if (!tools || tools.length === 0) return null;
+  const lastActivityById = {};
+  (overviewData || []).forEach(t => { lastActivityById[t.id] = t.lastActivity; });
+
   return (
     <div className="tier-board">
       {Object.keys(TIER_META).map(tierKey => {
@@ -758,19 +761,32 @@ function ToolTierBoard({ tools }) {
             {toolsInTier.length === 0 ? (
               <div className="tier-column-empty">No tools here</div>
             ) : (
-              toolsInTier.map(tool => (
-                <div className="tier-tool-card" key={tool.id} title={tool.reason}>
-                  <div className="tier-tool-name">{tool.name}</div>
-                  <div className="tier-tool-meta">
-                    <span>{tool.usage} assessments</span>
-                    {tool.performanceScore !== null && <span>{tool.performanceScore}/100</span>}
-                    <TrendIndicator trend={tool.trend} />
+              toolsInTier.map(tool => {
+                const lastActivity = lastActivityById[tool.id];
+                return (
+                  <div className="tier-tool-card" key={tool.id} onClick={() => onSelectTool && onSelectTool(tool.id)}>
+                    <div className="tier-tool-top">
+                      <div className="tier-tool-name">{tool.name}</div>
+                      <span className={`mode-badge ${tool.mode === 'live' ? 'live' : 'mock'}`} style={{ fontSize: '0.62rem', padding: '2px 6px' }}>
+                        {tool.mode}
+                      </span>
+                    </div>
+                    <div className="tier-tool-category">{tool.category}</div>
+                    <div className="tier-tool-meta">
+                      <span>{tool.usage} assessments</span>
+                      {tool.performanceScore !== null && <span>{tool.performanceScore}/100</span>}
+                      <TrendIndicator trend={tool.trend} />
+                    </div>
+                    {tool.hasPaymentData && (
+                      <div className="tier-tool-payment">{tool.paymentRate}% payment conversion</div>
+                    )}
+                    <div className="tier-tool-reason">{tool.reason}</div>
+                    <div className="tier-tool-activity">
+                      {lastActivity ? `Last activity ${timeAgo(lastActivity)}` : 'No activity yet'}
+                    </div>
                   </div>
-                  {tool.hasPaymentData && (
-                    <div className="tier-tool-payment">{tool.paymentRate}% payment conversion</div>
-                  )}
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         );
@@ -926,10 +942,11 @@ function OrgBreadthChart({ data }) {
     return <div className="trend-chart-empty">No organization data available across live-connected tools yet.</div>;
   }
   const chartData = data.distribution.map(d => ({ ...d, label: `${d.toolCount} tool${d.toolCount === 1 ? '' : 's'}` }));
+  const topOrgs = data.topOrgs || [];
   return (
     <div>
       <div className="org-breadth-headline">
-        <strong>{data.lowUsagePercentage}%</strong> of organizations use only 1–2 tools
+        <strong>{data.lowUsagePercentage}%</strong> of {data.totalOrgs} organizations use only 1–2 tools
       </div>
       <ResponsiveContainer width="100%" height={Math.max(chartData.length * 38, 160)}>
         <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 24, left: 0, bottom: 0 }}>
@@ -944,13 +961,38 @@ function OrgBreadthChart({ data }) {
           />
           <RTooltip
             formatter={(value, name, props) => [`${value} orgs (${props.payload.percentage}%)`, 'Organizations']}
-            contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
+            contentStyle={{ background: 'var(--bg-surface)', border: 'none', borderRadius: 12, fontSize: 12, boxShadow: '6px 6px 14px rgba(163,177,198,0.5), -6px -6px 14px rgba(255,255,255,0.85)' }}
           />
           <Bar dataKey="orgCount" fill={CHART_COLORS.primary} radius={[0, 4, 4, 0]} barSize={16}>
             <LabelList dataKey="orgCount" position="right" style={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+
+      {/* The concrete "who" behind the bucket counts above — top orgs by
+          adoption depth, so this panel answers "which orgs specifically
+          need an upsell nudge" instead of just "how many." */}
+      {topOrgs.length > 0 && (
+        <div style={{ marginTop: '1.25rem' }}>
+          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.6rem' }}>
+            Top Organizations by Tool Adoption
+          </div>
+          <div className="org-list">
+            {topOrgs.map(org => (
+              <div className="org-list-row" key={org.organization}>
+                <div className="org-list-name" title={org.organization}>{org.organization}</div>
+                <span className={`tool-count-pill ${org.toolsUsed <= 2 ? 'low' : org.toolsUsed <= 4 ? 'mid' : 'high'}`}>
+                  {org.toolsUsed} tool{org.toolsUsed === 1 ? '' : 's'}
+                </span>
+                <span className="org-list-meta">{org.totalAssessments} assessments</span>
+                <span className="org-list-meta">
+                  {org.lastActivity ? `Active ${timeAgo(org.lastActivity)}` : 'No activity date'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2069,7 +2111,7 @@ function App() {
                           <th>Last Activity</th>
                           <th>Trend</th>
                           <th>Health</th>
-                          <th></th>
+                          <th>Action</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2114,13 +2156,17 @@ function App() {
                                 <TrendIndicator trend={item.trend} />
                               </td>
                               <td>
-                                <span
-                                  className={`status-dot ${item.mode === 'live' ? 'online' : 'offline'}`}
-                                  title={item.mode === 'live' ? 'Online/Live' : 'Using Fallback Mock'}
-                                ></span>
+                                <span className={`health-status-pill ${toolHealth ? toolHealth.status : (item.mode === 'live' ? 'unknown' : 'mock')}`}>
+                                  {toolHealth ? toolHealth.status : (item.mode === 'live' ? 'unknown' : 'mock')}
+                                </span>
                               </td>
                               <td>
-                                <button className="btn btn-secondary btn-sm">View</button>
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={(e) => { e.stopPropagation(); setAnalyticsCategory(item.category || 'Uncategorized'); setAnalyticsTool(item.id); }}
+                                >
+                                  View
+                                </button>
                               </td>
                             </tr>
                           );
@@ -2144,7 +2190,13 @@ function App() {
                       Open full scorecard →
                     </span>
                   </div>
-                  {toolScoring ? <ToolTierBoard tools={toolScoring} /> : <div className="trend-chart-empty">Loading tool tiers...</div>}
+                  {toolScoring ? (
+                    <ToolTierBoard
+                      tools={toolScoring}
+                      overviewData={overviewData}
+                      onSelectTool={(dbId) => { setAnalyticsCategory(overviewData.find(t => t.id === dbId)?.category || 'Uncategorized'); setAnalyticsTool(dbId); }}
+                    />
+                  ) : <div className="trend-chart-empty">Loading tool tiers...</div>}
                 </div>
 
                 {/* Org Tool-Usage Breadth — cross-tool adoption depth per org */}
@@ -2617,7 +2669,7 @@ function App() {
                         <th>Submitted</th>
                         <th>Score</th>
                         <th>Status</th>
-                        <th></th>
+                        <th>Action</th>
                       </tr>
                     </thead>
                     <tbody>
