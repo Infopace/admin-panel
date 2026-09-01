@@ -1546,41 +1546,46 @@ body {
   gap: 1.25rem;
 }
 
+/* Professional/restrained KPI tile: the neutral neomorphic surface every
+   other card uses, not a saturated full-card color block — the accent
+   color lives only in the small icon chip, the way a Stripe/Linear-style
+   dashboard tile does it, not a consumer-app gradient card. */
 .kpi-card {
   position: relative;
   border-radius: var(--radius-lg);
   padding: 1.25rem 1.4rem;
-  color: #ffffff;
-  box-shadow: var(--shadow-md);
+  background-color: var(--bg-secondary);
+  box-shadow: var(--neo-shadow-raised-sm);
   transition: var(--transition-fast);
 }
 
 .kpi-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--neo-shadow-raised);
 }
 
 .kpi-card-icon {
   width: 38px;
   height: 38px;
   border-radius: var(--radius-md);
-  background-color: rgba(255, 255, 255, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 0.9rem;
+  color: #ffffff;
+  box-shadow: 3px 3px 8px rgba(163, 177, 198, 0.4);
 }
 
 .kpi-card-label {
   font-size: 0.78rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--text-secondary);
   margin-bottom: 0.35rem;
 }
 
 .kpi-card-value {
   font-size: 1.85rem;
   font-weight: 800;
+  color: var(--text-primary);
   margin-bottom: 0.65rem;
   line-height: 1;
 }
@@ -1590,7 +1595,7 @@ body {
   align-items: center;
   gap: 0.5rem;
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--text-muted);
 }
 
 .kpi-card-trend {
@@ -1600,22 +1605,22 @@ body {
   padding: 0.1rem 0.45rem;
   border-radius: 999px;
   font-weight: 700;
-  color: #ffffff;
   flex-shrink: 0;
 }
 
-/* Direction actually changes color here, not just the arrow icon —
-   same translucent-white pill read as identical for up vs. down */
 .kpi-card-trend.up {
-  background-color: rgba(12, 163, 12, 0.85);
+  background-color: rgba(12, 163, 12, 0.1);
+  color: var(--accent-success);
 }
 
 .kpi-card-trend.down {
-  background-color: rgba(208, 59, 59, 0.85);
+  background-color: rgba(208, 59, 59, 0.1);
+  color: var(--accent-danger);
 }
 
 .kpi-card-trend.flat {
-  background-color: rgba(255, 255, 255, 0.22);
+  background-color: var(--bg-surface-hover);
+  color: var(--text-muted);
 }
 
 .trend-chart-empty {

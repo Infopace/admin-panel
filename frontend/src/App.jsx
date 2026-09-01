@@ -483,8 +483,8 @@ function aggregateVolumeTrend(tools) {
 // passed (i.e. real data exists) — no placeholder "0%" or invented arrows.
 function KpiCard({ icon: Icon, gradient, label, value, sub, trend }) {
   return (
-    <div className="kpi-card" style={{ background: gradient }}>
-      <div className="kpi-card-icon"><Icon size={18} /></div>
+    <div className="kpi-card">
+      <div className="kpi-card-icon" style={{ background: gradient }}><Icon size={18} /></div>
       <div className="kpi-card-label">{label}</div>
       <div className="kpi-card-value">{value}</div>
       <div className="kpi-card-footer">
