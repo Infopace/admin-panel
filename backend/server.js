@@ -677,6 +677,86 @@ app.get('/api/tool-scoring', async (req, res) => {
   }
 });
 
+// Tool Performance — the org-head-grade single source of truth for "how
+// is each tool doing and what should I do about it." One row per tool
+// merging every signal this panel can honestly compute: usage + 7-day
+// trend, score quality, payment conversion (only where a tool actually
+// tracks it), org/user reach (only where a stable id exists), live
+// health, and the same composite tier /api/tool-scoring already
+// computes (reused via computeToolTier, not recomputed differently so
+// the two views never disagree). A metric a tool's adapter doesn't
+// support comes back null — same "don't fake it" rule as every other
+// endpoint here, not a zero or a fabricated placeholder.
+app.get('/api/tool-performance', async (req, res) => {
+  try {
+    const tools = [];
+    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5', 'db6']) {
+      const adapter = ADAPTERS[dbId];
+      const { candidates, isMock } = await fetchCandidatesForTool(dbId);
+      const stats = computeToolStats(candidates);
+      const trend = computeTrend(candidates);
+      const client = isMock ? null : getSupabaseClient(dbId);
+
+      const paymentRate = isMock ? null : await getToolPaymentRate(dbId, adapter);
+      const { tier, performanceScore, reason } = computeToolTier({ stats, trend, paymentRate });
+
+      let orgCount = null;
+      if (client && typeof adapter.getOrgBreakdown === 'function') {
+        try {
+          orgCount = (await adapter.getOrgBreakdown(client)).length;
+        } catch (err) {
+          console.warn(`getOrgBreakdown failed for ${dbId} during tool-performance:`, err.message);
+        }
+      }
+
+      let uniqueUsers = null;
+      let avgAttemptsPerUser = null;
+      if (client && typeof adapter.getUserBreakdown === 'function') {
+        try {
+          const ub = await adapter.getUserBreakdown(client);
+          uniqueUsers = ub.totalUniqueUsers;
+          avgAttemptsPerUser = ub.averageAttemptsPerUser;
+        } catch (err) {
+          console.warn(`getUserBreakdown failed for ${dbId} during tool-performance:`, err.message);
+        }
+      }
+
+      const health = await buildHealthEntry(dbId);
+
+      tools.push({
+        id: dbId,
+        name: adapter.metadata.name,
+        category: adapter.metadata.category || 'Uncategorized',
+        mode: isMock ? 'mock' : 'live',
+        usage: stats.totalTestTakers,
+        avgScorePercentage: stats.averageScorePercentage,
+        medianScorePercentage: stats.medianScorePercentage,
+        scoreDistribution: stats.scoreDistribution,
+        lastActivity: stats.lastActivity,
+        trend,
+        hasPaymentData: paymentRate !== null,
+        paymentRate,
+        orgCount,
+        uniqueUsers,
+        avgAttemptsPerUser,
+        health: {
+          status: health.status,
+          errorRate: health.errorRate,
+          avgLatencyMs: health.avgLatencyMs,
+          p95LatencyMs: health.p95LatencyMs,
+          availability: health.availability
+        },
+        performanceScore,
+        tier,
+        reason
+      });
+    }
+    res.json({ tools });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Org tool-usage breadth ("N% of orgs use only 1-2 tools") — aggregates
 // the per-tool org breakdowns already fetched for Organization Monitoring
 // into a cross-tool view. Matches organizations by name across the 5
@@ -1229,39 +1309,43 @@ async function checkToolAvailability(dbId) {
 
 // System / Health Monitoring (doc section 14) — per-adapter query
 // health since the backend started, plus real Tool Availability.
+async function buildHealthEntry(dbId) {
+  const stat = healthStats[dbId];
+  const cfg = dbConfig[dbId];
+  const hasConfig = !!(cfg && cfg.url && cfg.key);
+  const errorRate = stat.calls > 0 ? Math.round((stat.errors / stat.calls) * 100) : 0;
+  const avgLatencyMs = stat.calls > 0 ? Math.round(stat.totalLatencyMs / stat.calls) : null;
+  // A P95 from fewer than 5 samples is just the max — not a meaningful
+  // percentile, so hide it rather than show a misleadingly precise number.
+  const p95LatencyMs = stat.latencies.length >= 5 ? percentile(stat.latencies, 95) : null;
+
+  let status = 'unknown';
+  if (!hasConfig) status = 'mock';
+  else if (errorRate > 20) status = 'critical';
+  else if (errorRate > 0) status = 'warning';
+  else if (stat.calls > 0) status = 'healthy';
+
+  const availability = await checkToolAvailability(dbId);
+
+  return {
+    name: ADAPTERS[dbId].metadata.name,
+    status,
+    calls: stat.calls,
+    errors: stat.errors,
+    errorRate,
+    avgLatencyMs,
+    p95LatencyMs,
+    lastError: stat.lastError,
+    lastErrorAt: stat.lastErrorAt,
+    lastSuccessAt: stat.lastSuccessAt,
+    availability
+  };
+}
+
 app.get('/api/health', async (req, res) => {
   const health = {};
   for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5', 'db6']) {
-    const stat = healthStats[dbId];
-    const cfg = dbConfig[dbId];
-    const hasConfig = !!(cfg && cfg.url && cfg.key);
-    const errorRate = stat.calls > 0 ? Math.round((stat.errors / stat.calls) * 100) : 0;
-    const avgLatencyMs = stat.calls > 0 ? Math.round(stat.totalLatencyMs / stat.calls) : null;
-    // A P95 from fewer than 5 samples is just the max — not a meaningful
-    // percentile, so hide it rather than show a misleadingly precise number.
-    const p95LatencyMs = stat.latencies.length >= 5 ? percentile(stat.latencies, 95) : null;
-
-    let status = 'unknown';
-    if (!hasConfig) status = 'mock';
-    else if (errorRate > 20) status = 'critical';
-    else if (errorRate > 0) status = 'warning';
-    else if (stat.calls > 0) status = 'healthy';
-
-    const availability = await checkToolAvailability(dbId);
-
-    health[dbId] = {
-      name: ADAPTERS[dbId].metadata.name,
-      status,
-      calls: stat.calls,
-      errors: stat.errors,
-      errorRate,
-      avgLatencyMs,
-      p95LatencyMs,
-      lastError: stat.lastError,
-      lastErrorAt: stat.lastErrorAt,
-      lastSuccessAt: stat.lastSuccessAt,
-      availability
-    };
+    health[dbId] = await buildHealthEntry(dbId);
   }
   res.json(health);
 });

@@ -1353,6 +1353,30 @@ body {
   color: var(--text-primary);
 }
 
+/* Tool Performance page */
+.panel-note {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 0.75rem 0 0;
+}
+
+.tier-pill-table {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.tool-performance-table th {
+  user-select: none;
+  white-space: nowrap;
+}
+
+.tool-performance-table tbody tr {
+  cursor: pointer;
+}
+
 /* Analytics tool-picker dropdown — deliberately its own class rather than
    .form-control, which has a conflicting dark-theme definition scoped to
    the auth screen elsewhere in this file. */

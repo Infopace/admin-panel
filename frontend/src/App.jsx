@@ -747,6 +747,145 @@ function ToolTierBoard({ tools }) {
   );
 }
 
+// Tool Performance page — a sortable scorecard, one row per tool, built
+// from /api/tool-performance. Deliberately reuses TIER_META, AvailabilityPill
+// and health-status-pill from the Analytics panels above so a tier or a
+// health status reads the same color/label everywhere in the app, not a
+// second competing visual language. A column showing "—" means that
+// tool's adapter doesn't track that signal (no payment column, no
+// stable user id, etc.) — same "don't fake it" rule as everywhere else,
+// not a zero.
+const TOOL_PERF_COLUMNS = [
+  { key: 'name', label: 'Tool', sortable: true },
+  { key: 'category', label: 'Category', sortable: true },
+  { key: 'usage', label: 'Volume (7d trend)', sortable: true, align: 'right' },
+  { key: 'avgScorePercentage', label: 'Avg Score', sortable: true, align: 'right' },
+  { key: 'paymentRate', label: 'Payment Conv.', sortable: true, align: 'right' },
+  { key: 'orgCount', label: 'Orgs', sortable: true, align: 'right' },
+  { key: 'uniqueUsers', label: 'Users (repeat)', sortable: true, align: 'right' },
+  { key: 'health', label: 'Health', sortable: false },
+  { key: 'performanceScore', label: 'Composite', sortable: true, align: 'right' },
+  { key: 'tier', label: 'Tier', sortable: true }
+];
+
+// Same thresholds as the App component's own getScoreClass(score, max) —
+// this variant takes an already-computed percentage, for places (like
+// this table) that only have avgScorePercentage, not a raw score/max pair.
+function getScoreClassFromPct(pct) {
+  if (pct >= 85) return 'high';
+  if (pct >= 60) return 'medium';
+  return 'low';
+}
+
+function sortToolPerformance(tools, sort) {
+  const { key, dir } = sort;
+  const mul = dir === 'asc' ? 1 : -1;
+  return [...tools].sort((a, b) => {
+    let va = a[key];
+    let vb = b[key];
+    // nulls (metric not tracked for this tool) always sort last, in either direction
+    if (va === null && vb === null) return 0;
+    if (va === null) return 1;
+    if (vb === null) return -1;
+    if (typeof va === 'string') return va.localeCompare(vb) * mul;
+    return (va - vb) * mul;
+  });
+}
+
+function ToolPerformanceTable({ tools, sort, onSort, onSelectTool }) {
+  if (!tools) return <div className="trend-chart-empty">Loading tool performance...</div>;
+  if (tools.length === 0) return <div className="trend-chart-empty">No tools configured.</div>;
+
+  const sorted = sortToolPerformance(tools, sort);
+  const tierCounts = tools.reduce((acc, t) => { acc[t.tier] = (acc[t.tier] || 0) + 1; return acc; }, {});
+
+  const handleHeaderClick = (col) => {
+    if (!col.sortable) return;
+    if (sort.key === col.key) {
+      onSort({ key: col.key, dir: sort.dir === 'asc' ? 'desc' : 'asc' });
+    } else {
+      onSort({ key: col.key, dir: 'desc' });
+    }
+  };
+
+  return (
+    <div>
+      <div className="org-breadth-headline" style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+        {Object.keys(TIER_META).map(tierKey => (
+          <span key={tierKey}>
+            <strong style={{ color: TIER_META[tierKey].color }}>{tierCounts[tierKey] || 0}</strong> {TIER_META[tierKey].label}
+          </span>
+        ))}
+      </div>
+      <div className="table-container">
+        <table className="custom-table tool-performance-table">
+          <thead>
+            <tr>
+              {TOOL_PERF_COLUMNS.map(col => (
+                <th
+                  key={col.key}
+                  style={{ textAlign: col.align || 'left', cursor: col.sortable ? 'pointer' : 'default' }}
+                  onClick={() => handleHeaderClick(col)}
+                >
+                  {col.label}
+                  {col.sortable && sort.key === col.key && (sort.dir === 'asc' ? ' ▲' : ' ▼')}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map(t => {
+              const tierMeta = TIER_META[t.tier] || TIER_META.review;
+              return (
+                <tr key={t.id} onClick={() => onSelectTool(t.id)}>
+                  <td>
+                    <div style={{ fontWeight: 600 }}>{t.name}</div>
+                    <span className={`mode-badge ${t.mode === 'live' ? 'live' : 'mock'}`} style={{ fontSize: '0.65rem' }}>{t.mode}</span>
+                  </td>
+                  <td>{t.category}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.4rem' }}>
+                      {t.usage}
+                      <TrendIndicator trend={t.trend} />
+                    </div>
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    <span className={`score-badge ${getScoreClassFromPct(t.avgScorePercentage)}`}>{t.avgScorePercentage}%</span>
+                  </td>
+                  <td style={{ textAlign: 'right' }}>{t.hasPaymentData ? `${t.paymentRate}%` : '—'}</td>
+                  <td style={{ textAlign: 'right' }}>{t.orgCount !== null ? t.orgCount : '—'}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    {t.uniqueUsers !== null ? `${t.uniqueUsers} (${t.avgAttemptsPerUser}x)` : '—'}
+                  </td>
+                  <td>
+                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                      <span className={`health-status-pill ${t.health.status}`}>{t.health.status}</span>
+                      <AvailabilityPill availability={t.health.availability} />
+                    </div>
+                  </td>
+                  <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                    {t.performanceScore !== null ? `${t.performanceScore}/100` : '—'}
+                  </td>
+                  <td>
+                    <span className="tier-pill-table" style={{ background: `${tierMeta.color}22`, color: tierMeta.color }} title={t.reason}>
+                      {tierMeta.label}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="panel-note">
+        Composite = score quality + payment conversion (only where a tool tracks payment), weighted against real
+        week-over-week volume momentum — the same formula behind the Analytics tier board. Click a column to sort,
+        click a row to open that tool's candidate list.
+      </p>
+    </div>
+  );
+}
+
 // Org tool-usage breadth — how many of the 5 tools each org actually
 // uses, matched by organization name across the separate per-tool org
 // breakdowns (not a verified cross-system identity match).
@@ -915,6 +1054,8 @@ function App() {
   const [toolScoring, setToolScoring] = useState(null);
   const [orgBreadth, setOrgBreadth] = useState(null);
   const [acquisition, setAcquisition] = useState(null);
+  const [toolPerformance, setToolPerformance] = useState(null);
+  const [toolPerfSort, setToolPerfSort] = useState({ key: 'performanceScore', dir: 'desc' });
   const [weeklyReview, setWeeklyReview] = useState(null);
   const [weeklyReviewLoading, setWeeklyReviewLoading] = useState(false);
 
@@ -1110,6 +1251,22 @@ function App() {
       }
     };
     fetchToolScoringAndBreadth();
+  }, [token, currentView]);
+
+  // Tool Performance — the dedicated per-tool scorecard page (its own
+  // sidebar entry, not just the tier board embedded in Analytics). One
+  // merged backend call, only fetched when this view is open.
+  useEffect(() => {
+    if (!token || currentView !== 'tool-performance') return;
+    const fetchToolPerformance = async () => {
+      try {
+        const res = await authFetch(`${API_BASE}/tool-performance`);
+        setToolPerformance((await res.json()).tools || []);
+      } catch (err) {
+        console.error('Error fetching tool performance:', err);
+      }
+    };
+    fetchToolPerformance();
   }, [token, currentView]);
 
   // Weekly PM Review — same alert signals as Analytics/Overview, just
@@ -1478,6 +1635,14 @@ function App() {
                 onClick={() => setCurrentView('analytics')}
               >
                 <BarChart3 size={18} /> Analytics
+              </div>
+            </li>
+            <li className="menu-item">
+              <div
+                className={`menu-link ${currentView === 'tool-performance' ? 'active' : ''}`}
+                onClick={() => setCurrentView('tool-performance')}
+              >
+                <Star size={18} /> Tool Performance
               </div>
             </li>
             <li className="menu-item">
@@ -1940,7 +2105,12 @@ function App() {
                 <div className="panel">
                   <div className="panel-header">
                     <h2><PanelIconBadge icon={Star} color="#f59e0b" />Tool Performance Tiers</h2>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Usage + score + payment conversion, not revenue-weighted</span>
+                    <span
+                      style={{ fontSize: '0.8rem', color: 'var(--accent-primary)', cursor: 'pointer', fontWeight: 600 }}
+                      onClick={() => setCurrentView('tool-performance')}
+                    >
+                      Open full scorecard →
+                    </span>
                   </div>
                   {toolScoring ? <ToolTierBoard tools={toolScoring} /> : <div className="trend-chart-empty">Loading tool tiers...</div>}
                 </div>
@@ -2480,6 +2650,43 @@ function App() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* VIEW: TOOL PERFORMANCE — the org-head-grade per-tool scorecard.
+            Distinct from the tier board embedded in Analytics: that one
+            answers "which tools need attention right now" at a glance;
+            this page is the full sortable table for deciding what to do
+            about a specific tool — usage+trend, quality, revenue (only
+            where real), org/user reach, live health, and the tier, all
+            in one row, one merged backend call. */}
+        {currentView === 'tool-performance' && (
+          <div>
+            <div className="header-container">
+              <div className="title-area">
+                <h1>Tool Performance</h1>
+                <p>Every signal this panel can honestly compute, per tool, in one sortable scorecard.</p>
+              </div>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={async () => {
+                  setToolPerformance(null);
+                  const res = await authFetch(`${API_BASE}/tool-performance`);
+                  setToolPerformance((await res.json()).tools || []);
+                }}
+              >
+                <RefreshCw size={14} /> Refresh
+              </button>
+            </div>
+
+            <div className="panel">
+              <ToolPerformanceTable
+                tools={toolPerformance}
+                sort={toolPerfSort}
+                onSort={setToolPerfSort}
+                onSelectTool={(dbId) => setCurrentView(dbId)}
+              />
+            </div>
           </div>
         )}
 
