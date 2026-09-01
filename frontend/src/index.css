@@ -1196,6 +1196,81 @@ body {
   color: var(--text-primary);
 }
 
+/* Weekly PM Review checklist — one row per topic (volume, scores, errors,
+   payments, reports, availability, data source), each with a status pill
+   and, when there's something to flag, the specific tool/message lines
+   underneath. Same visual language as .alert-row (icon badge + border). */
+.weekly-review-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.weekly-review-row {
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.weekly-review-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.weekly-review-row-main {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.weekly-review-row-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.weekly-review-row-label {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.weekly-review-row-desc {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+}
+
+.weekly-review-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.weekly-review-row-items {
+  margin-top: 0.6rem;
+  margin-left: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.weekly-review-item {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.7rem;
+}
+
+.weekly-review-item strong {
+  color: var(--text-primary);
+}
+
 /* Analytics tool-picker dropdown — deliberately its own class rather than
    .form-control, which has a conflicting dark-theme definition scoped to
    the auth screen elsewhere in this file. */

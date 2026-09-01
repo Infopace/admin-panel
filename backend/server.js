@@ -1088,84 +1088,146 @@ app.get('/api/overview/trend', async (req, res) => {
 // data already on hand: volume drop, low-score concentration, PDF
 // failure rate, and elevated query error rate. Not the full doc list
 // (that needs status/history data this dashboard doesn't have), but
-// real anomalies rather than nothing.
+// real anomalies rather than nothing. Each alert carries a `category`
+// tag so the same signals can be re-grouped elsewhere (see the Weekly
+// Review endpoint below) without recomputing anything.
+async function buildAlerts() {
+  const alerts = [];
+  const reports = readReports();
+
+  for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
+    const { adapter, candidates, isMock } = await fetchCandidatesForTool(dbId);
+    const stats = computeToolStats(candidates);
+    const trend = computeTrend(candidates);
+    const name = adapter.metadata.name;
+
+    // Site availability is independent of DB mock/live status — the
+    // public site can be down even while mock data is showing fine.
+    const availability = await checkToolAvailability(dbId);
+    if (availability && availability.status !== 'up') {
+      const reason = availability.status === 'suspended'
+        ? 'the hosting service reports it as suspended'
+        : `it returned ${availability.statusCode || 'no response'}`;
+      alerts.push({ tool: name, dbId, severity: 'critical', category: 'availability', message: `Tool website is unreachable — ${reason} (${availability.url})` });
+    }
+
+    if (isMock) {
+      alerts.push({ tool: name, dbId, severity: 'info', category: 'dataSource', message: 'Running on mock data — live Supabase connection not configured' });
+    } else {
+      if (trend.direction === 'down' && Math.abs(trend.changePercent) >= 20) {
+        alerts.push({ tool: name, dbId, severity: 'warning', category: 'volume', message: `Completed assessments dropped ${Math.abs(trend.changePercent)}% vs the prior 7 days` });
+      }
+      if (stats.totalTestTakers > 0 && stats.scoreDistribution.low >= 40) {
+        alerts.push({ tool: name, dbId, severity: 'warning', category: 'scores', message: `${stats.scoreDistribution.low}% of recent scores are in the Low band` });
+      }
+      const health = healthStats[dbId];
+      if (health && health.calls > 0) {
+        const errorRate = Math.round((health.errors / health.calls) * 100);
+        if (errorRate > 20) {
+          alerts.push({ tool: name, dbId, severity: 'critical', category: 'errors', message: `Elevated query error rate (${errorRate}%)` });
+        }
+      }
+
+      if (typeof adapter.getPaymentSummary === 'function') {
+        try {
+          const client = getSupabaseClient(dbId);
+          if (client) {
+            const payment = await adapter.getPaymentSummary(client);
+            const paymentTotal = payment.paidCount + payment.unpaidCount;
+            if (paymentTotal >= 5 && payment.paymentRate < 20) {
+              alerts.push({ tool: name, dbId, severity: 'warning', category: 'payments', message: `Low payment conversion — only ${payment.paymentRate}% of submissions convert (${payment.paidCount}/${paymentTotal})` });
+            }
+          }
+        } catch (err) {
+          console.warn(`Payment summary failed for ${dbId} during alerts check:`, err.message);
+        }
+      }
+    }
+
+    const toolReports = reports.filter(r => r.dbId === dbId);
+    if (toolReports.length >= 5) {
+      const failed = toolReports.filter(r => r.status === 'failed').length;
+      const failRate = Math.round((failed / toolReports.length) * 100);
+      if (failRate >= 10) {
+        alerts.push({ tool: name, dbId, severity: 'critical', category: 'reports', message: `PDF report generation failing ${failRate}% of the time` });
+      }
+
+      const timedReports = toolReports.filter(r => r.status === 'success' && typeof r.durationMs === 'number');
+      if (timedReports.length >= 5) {
+        const avgMs = Math.round(timedReports.reduce((sum, r) => sum + r.durationMs, 0) / timedReports.length);
+        if (avgMs > 3000) {
+          alerts.push({ tool: name, dbId, severity: 'warning', category: 'reports', message: `Report generation delay — averaging ${(avgMs / 1000).toFixed(1)}s` });
+        }
+      }
+    }
+  }
+
+  return alerts;
+}
+
 app.get('/api/alerts', async (req, res) => {
   try {
-    const alerts = [];
-    const reports = readReports();
-
-    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
-      const { adapter, candidates, isMock } = await fetchCandidatesForTool(dbId);
-      const stats = computeToolStats(candidates);
-      const trend = computeTrend(candidates);
-      const name = adapter.metadata.name;
-
-      // Site availability is independent of DB mock/live status — the
-      // public site can be down even while mock data is showing fine.
-      const availability = await checkToolAvailability(dbId);
-      if (availability && availability.status !== 'up') {
-        const reason = availability.status === 'suspended'
-          ? 'the hosting service reports it as suspended'
-          : `it returned ${availability.statusCode || 'no response'}`;
-        alerts.push({ tool: name, dbId, severity: 'critical', message: `Tool website is unreachable — ${reason} (${availability.url})` });
-      }
-
-      if (isMock) {
-        alerts.push({ tool: name, dbId, severity: 'info', message: 'Running on mock data — live Supabase connection not configured' });
-      } else {
-        if (trend.direction === 'down' && Math.abs(trend.changePercent) >= 20) {
-          alerts.push({ tool: name, dbId, severity: 'warning', message: `Completed assessments dropped ${Math.abs(trend.changePercent)}% vs the prior 7 days` });
-        }
-        if (stats.totalTestTakers > 0 && stats.scoreDistribution.low >= 40) {
-          alerts.push({ tool: name, dbId, severity: 'warning', message: `${stats.scoreDistribution.low}% of recent scores are in the Low band` });
-        }
-        const health = healthStats[dbId];
-        if (health && health.calls > 0) {
-          const errorRate = Math.round((health.errors / health.calls) * 100);
-          if (errorRate > 20) {
-            alerts.push({ tool: name, dbId, severity: 'critical', message: `Elevated query error rate (${errorRate}%)` });
-          }
-        }
-
-        if (typeof adapter.getPaymentSummary === 'function') {
-          try {
-            const client = getSupabaseClient(dbId);
-            if (client) {
-              const payment = await adapter.getPaymentSummary(client);
-              const paymentTotal = payment.paidCount + payment.unpaidCount;
-              if (paymentTotal >= 5 && payment.paymentRate < 20) {
-                alerts.push({ tool: name, dbId, severity: 'warning', message: `Low payment conversion — only ${payment.paymentRate}% of submissions convert (${payment.paidCount}/${paymentTotal})` });
-              }
-            }
-          } catch (err) {
-            console.warn(`Payment summary failed for ${dbId} during alerts check:`, err.message);
-          }
-        }
-      }
-
-      const toolReports = reports.filter(r => r.dbId === dbId);
-      if (toolReports.length >= 5) {
-        const failed = toolReports.filter(r => r.status === 'failed').length;
-        const failRate = Math.round((failed / toolReports.length) * 100);
-        if (failRate >= 10) {
-          alerts.push({ tool: name, dbId, severity: 'critical', message: `PDF report generation failing ${failRate}% of the time` });
-        }
-
-        const timedReports = toolReports.filter(r => r.status === 'success' && typeof r.durationMs === 'number');
-        if (timedReports.length >= 5) {
-          const avgMs = Math.round(timedReports.reduce((sum, r) => sum + r.durationMs, 0) / timedReports.length);
-          if (avgMs > 3000) {
-            alerts.push({ tool: name, dbId, severity: 'warning', message: `Report generation delay — averaging ${(avgMs / 1000).toFixed(1)}s` });
-          }
-        }
-      }
-    }
-
+    const alerts = await buildAlerts();
     if (alerts.length === 0) {
-      alerts.push({ tool: null, dbId: null, severity: 'ok', message: 'All tools operating normally' });
+      alerts.push({ tool: null, dbId: null, severity: 'ok', category: 'overall', message: 'All tools operating normally' });
     }
-
     res.json({ alerts });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Weekly PM Review (doc-inspired, not in the original spec) — the exact
+// same alert signals above, just re-grouped into a fixed weekly checklist
+// instead of a flat per-tool list, so a PM can scan one status per topic
+// instead of hunting through Overview/Analytics for red flags. No new
+// data source: this is a presentation of buildAlerts(), nothing else.
+const WEEKLY_REVIEW_ROWS = [
+  { category: 'volume', label: 'Assessment Volume', description: 'Week-over-week completed assessment counts, per tool.' },
+  { category: 'scores', label: 'Score Quality', description: 'Share of recent scores landing in the Low band.' },
+  { category: 'errors', label: 'System Errors', description: 'Supabase query error rate across all 5 tools.' },
+  { category: 'payments', label: 'Payment Conversion', description: 'Paid vs. unpaid submission rate for tools that track payment.' },
+  { category: 'reports', label: 'Report Generation', description: 'PDF report failure rate and generation time.' },
+  { category: 'availability', label: 'Site Availability', description: 'Whether each tool\'s public site is reachable.' },
+  { category: 'dataSource', label: 'Live Data Connections', description: 'Tools still running on mock data instead of a connected Supabase project.' }
+];
+
+const SEVERITY_RANK = { critical: 3, warning: 2, info: 1, ok: 0 };
+const SEVERITY_TO_STATUS = { critical: 'escalate', warning: 'attention', info: 'attention', ok: 'on_track' };
+
+app.get('/api/weekly-review', async (req, res) => {
+  try {
+    const alerts = await buildAlerts();
+
+    const rows = WEEKLY_REVIEW_ROWS.map(row => {
+      const matches = alerts.filter(a => a.category === row.category);
+      if (matches.length === 0) {
+        return { category: row.category, label: row.label, description: row.description, status: 'on_track', items: [] };
+      }
+      const worst = matches.reduce((acc, a) => (SEVERITY_RANK[a.severity] > SEVERITY_RANK[acc.severity] ? a : acc), matches[0]);
+      return {
+        category: row.category,
+        label: row.label,
+        description: row.description,
+        status: SEVERITY_TO_STATUS[worst.severity] || 'attention',
+        items: matches.map(a => ({ tool: a.tool, severity: a.severity, message: a.message }))
+      };
+    });
+
+    const escalateCount = rows.filter(r => r.status === 'escalate').length;
+    const attentionCount = rows.filter(r => r.status === 'attention').length;
+    const onTrackCount = rows.filter(r => r.status === 'on_track').length;
+
+    const now = new Date();
+    const day = now.getUTCDay();
+    const monday = new Date(now);
+    monday.setUTCDate(now.getUTCDate() - ((day + 6) % 7));
+    const sunday = new Date(monday);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
+    const fmt = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    const weekLabel = `${fmt(monday)} – ${fmt(sunday)}, ${sunday.getUTCFullYear()}`;
+
+    res.json({ weekLabel, generatedAt: now.toISOString(), summary: { escalateCount, attentionCount, onTrackCount }, rows });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

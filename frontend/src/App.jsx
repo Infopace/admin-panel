@@ -24,7 +24,11 @@ import {
   HeartPulse,
   BarChart3,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  ListChecks,
+  CreditCard,
+  Globe,
+  CheckCircle2
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -663,6 +667,56 @@ function AlertRow({ alert }) {
   );
 }
 
+// Weekly PM Review — the same alert signals shown on Overview/Analytics,
+// re-grouped server-side into a fixed weekly checklist (one row per topic
+// instead of one row per tool) so a PM can scan status-by-topic in one pass.
+const REVIEW_STATUS = {
+  escalate: { label: 'Escalate', color: CHART_COLORS.danger, icon: AlertTriangle },
+  attention: { label: 'Attention', color: CHART_COLORS.warning, icon: AlertTriangle },
+  on_track: { label: 'On Track', color: CHART_COLORS.success, icon: CheckCircle2 }
+};
+
+const REVIEW_CATEGORY_ICON = {
+  volume: TrendingUp,
+  scores: Award,
+  errors: AlertTriangle,
+  payments: CreditCard,
+  reports: FileCheck2,
+  availability: Globe,
+  dataSource: Database
+};
+
+function WeeklyReviewRow({ row }) {
+  const status = REVIEW_STATUS[row.status] || REVIEW_STATUS.on_track;
+  const Icon = REVIEW_CATEGORY_ICON[row.category] || ListChecks;
+  const StatusIcon = status.icon;
+  return (
+    <div className="weekly-review-row">
+      <div className="weekly-review-row-main">
+        <span className="panel-icon-badge" style={{ background: CHART_COLORS.muted }}>
+          <Icon size={14} />
+        </span>
+        <div className="weekly-review-row-text">
+          <div className="weekly-review-row-label">{row.label}</div>
+          <div className="weekly-review-row-desc">{row.description}</div>
+        </div>
+        <span className="weekly-review-status-pill" style={{ background: `${status.color}22`, color: status.color }}>
+          <StatusIcon size={13} /> {status.label}
+        </span>
+      </div>
+      {row.items.length > 0 && (
+        <div className="weekly-review-row-items">
+          {row.items.map((item, i) => (
+            <div className="weekly-review-item" key={i}>
+              {item.tool && <strong>{item.tool}: </strong>}{item.message}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function App() {
   // Authentication State
   const [token, setToken] = useState(localStorage.getItem('token') || '');
@@ -708,6 +762,8 @@ function App() {
   const [healthData, setHealthData] = useState(null);
   const [reportsSummary, setReportsSummary] = useState(null);
   const [entitySummary, setEntitySummary] = useState(null);
+  const [weeklyReview, setWeeklyReview] = useState(null);
+  const [weeklyReviewLoading, setWeeklyReviewLoading] = useState(false);
 
   // Assessment Details State
   const [candidates, setCandidates] = useState([]);
@@ -880,6 +936,26 @@ function App() {
       }
     };
     fetchAnalyticsCrossTool();
+  }, [token, currentView]);
+
+  // Weekly PM Review — same alert signals as Analytics/Overview, just
+  // re-grouped server-side into a fixed weekly checklist. Only fetched
+  // when that view is open; also callable directly from its Refresh button.
+  const loadWeeklyReview = async () => {
+    setWeeklyReviewLoading(true);
+    try {
+      const res = await authFetch(`${API_BASE}/weekly-review`);
+      setWeeklyReview(await res.json());
+    } catch (err) {
+      console.error('Error fetching weekly review:', err);
+    } finally {
+      setWeeklyReviewLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!token || currentView !== 'weekly-review') return;
+    loadWeeklyReview();
   }, [token, currentView]);
 
   // Usage trend — scoped to the selected tool on Analytics, always
@@ -1228,6 +1304,14 @@ function App() {
                 onClick={() => setCurrentView('analytics')}
               >
                 <BarChart3 size={18} /> Analytics
+              </div>
+            </li>
+            <li className="menu-item">
+              <div
+                className={`menu-link ${currentView === 'weekly-review' ? 'active' : ''}`}
+                onClick={() => setCurrentView('weekly-review')}
+              >
+                <ListChecks size={18} /> Weekly Review
               </div>
             </li>
             <li className="menu-item">
@@ -2183,6 +2267,51 @@ function App() {
                   </table>
                 </div>
               </div>
+            )}
+          </div>
+        )}
+
+        {/* VIEW: WEEKLY REVIEW — no new data source. Same signals as the
+            Attention Required panels on Overview/Analytics, re-grouped by
+            /api/weekly-review into a fixed checklist (one row per topic)
+            instead of one row per tool, so a weekly pass is a quick scan
+            instead of hunting across pages. */}
+        {currentView === 'weekly-review' && (
+          <div>
+            <div className="header-container">
+              <div className="title-area">
+                <h1>Weekly PM Review</h1>
+                <p>{weeklyReview ? `Week of ${weeklyReview.weekLabel}` : 'Every tool, one topic per row — scan for what needs attention this week.'}</p>
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={loadWeeklyReview}>
+                <RefreshCw size={14} /> Refresh
+              </button>
+            </div>
+
+            {weeklyReviewLoading && !weeklyReview ? (
+              <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <RefreshCw className="animate-spin" size={32} style={{ margin: '0 auto 1rem auto', animation: 'spin 1s linear infinite' }} />
+                Building this week's checklist...
+              </div>
+            ) : weeklyReview && (
+              <>
+                <div className="kpi-grid" style={{ marginBottom: '1.5rem' }}>
+                  <KpiCard icon={AlertTriangle} gradient={KPI_GRADIENTS[4]} label="Escalate" value={weeklyReview.summary.escalateCount} sub="Topics needing action now" />
+                  <KpiCard icon={AlertTriangle} gradient={KPI_GRADIENTS[3]} label="Attention" value={weeklyReview.summary.attentionCount} sub="Worth a look this week" />
+                  <KpiCard icon={CheckCircle2} gradient={KPI_GRADIENTS[2]} label="On Track" value={weeklyReview.summary.onTrackCount} sub="No issues detected" />
+                </div>
+
+                <div className="panel">
+                  <div className="panel-header">
+                    <h2><PanelIconBadge icon={ListChecks} color={CHART_COLORS.primary} />This Week's Checklist</h2>
+                  </div>
+                  <div className="weekly-review-list">
+                    {weeklyReview.rows.map(row => (
+                      <WeeklyReviewRow row={row} key={row.category} />
+                    ))}
+                  </div>
+                </div>
+              </>
             )}
           </div>
         )}
