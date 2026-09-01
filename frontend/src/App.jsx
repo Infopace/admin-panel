@@ -52,16 +52,47 @@ import {
 
 const API_BASE = 'http://localhost:5000/api';
 
+// Validated per the dataviz skill (references/palette.md) — an 8-hue
+// fixed categorical order (never cycled or reordered per series) for
+// chart/tool identity, run through scripts/validate_palette.js against
+// this app's surface before adoption. Re-validate if this list changes.
+const CATEGORICAL_PALETTE = [
+  '#2a78d6', // 1 blue
+  '#eb6834', // 2 orange
+  '#1baf7a', // 3 aqua
+  '#eda100', // 4 yellow
+  '#e87ba4', // 5 magenta
+  '#008300', // 6 green
+  '#4a3aa7', // 7 violet
+  '#e34948'  // 8 red
+];
+
 // Shared chart palette — mirrors the CSS custom properties in index.css
 // (kept as literal hex here since Recharts renders raw SVG and some
 // browsers don't resolve var() inside SVG presentation attributes).
+// success/warning/danger are UI-chrome status colors (icon badges,
+// severity dots, tier colors) — the text/icon-safe darker step, so a
+// white icon on top of a warning badge stays legible. They are never
+// reused as a chart-series color; CATEGORICAL_PALETTE/TOOL_PALETTE do
+// that job instead.
 const CHART_COLORS = {
-  primary: '#4f46e5',
-  secondary: '#0891b2',
-  success: '#16a34a',
-  warning: '#ea580c',
-  danger: '#dc2626',
-  muted: '#94a3b8'
+  primary: CATEGORICAL_PALETTE[0],
+  secondary: CATEGORICAL_PALETTE[2],
+  success: '#0ca30c',
+  warning: '#b8690a',
+  danger: '#d03b3b',
+  muted: '#8991a6'
+};
+
+// The brighter chart-MARK version of the status palette (pie slices, bar
+// fills) — always shown with a legend or direct label alongside, per the
+// dataviz skill's relief rule, so the lighter/lower-contrast hex is fine
+// here even though it isn't for a bare icon or text.
+const STATUS_MARK_COLORS = {
+  good: '#0ca30c',
+  warning: '#fab219',
+  serious: '#ec835a',
+  critical: '#d03b3b'
 };
 
 const TREND_RANGES = [
@@ -254,11 +285,11 @@ function TrendChart({ series, toolNames }) {
       <AreaChart data={series} margin={{ top: 10, right: 12, left: -12, bottom: 0 }}>
         <defs>
           <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={CHART_COLORS.primary} stopOpacity={0.35} />
-            <stop offset="100%" stopColor={CHART_COLORS.primary} stopOpacity={0.02} />
+            <stop offset="0%" stopColor={CHART_COLORS.primary} stopOpacity={0.12} />
+            <stop offset="100%" stopColor={CHART_COLORS.primary} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
+        <CartesianGrid stroke="var(--border-color)" vertical={false} />
         <XAxis
           dataKey="date"
           tickFormatter={formatShortDate}
@@ -292,9 +323,9 @@ function TrendChart({ series, toolNames }) {
 // readable up to ~5 slices; 3 buckets is exactly the sweet spot.
 function ScoreDistributionChart({ distribution }) {
   const data = [
-    { name: 'Low', value: distribution.low, color: CHART_COLORS.danger },
-    { name: 'Medium', value: distribution.medium, color: CHART_COLORS.warning },
-    { name: 'High', value: distribution.high, color: CHART_COLORS.success }
+    { name: 'Low', value: distribution.low, color: STATUS_MARK_COLORS.critical },
+    { name: 'Medium', value: distribution.medium, color: STATUS_MARK_COLORS.serious },
+    { name: 'High', value: distribution.high, color: STATUS_MARK_COLORS.good }
   ];
   const allZero = data.every(d => d.value === 0);
 
@@ -316,7 +347,7 @@ function ScoreDistributionChart({ distribution }) {
             </Pie>
             <RTooltip
               formatter={(value, name) => [`${value}%`, name]}
-              contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
+              contentStyle={{ background: 'var(--bg-surface)', border: 'none', borderRadius: 12, fontSize: 12, boxShadow: '6px 6px 14px rgba(163,177,198,0.5), -6px -6px 14px rgba(255,255,255,0.85)' }}
             />
           </PieChart>
         </ResponsiveContainer>
@@ -345,7 +376,7 @@ function ToolComparisonCharts({ tools }) {
   const volumeData = [...tools].sort((a, b) => b.totalTestTakers - a.totalTestTakers);
   const scoreData = [...tools].sort((a, b) => b.averageScorePercentage - a.averageScorePercentage);
 
-  const scoreColor = (pct) => (pct >= 85 ? CHART_COLORS.success : pct >= 60 ? CHART_COLORS.warning : CHART_COLORS.danger);
+  const scoreColor = (pct) => (pct >= 85 ? STATUS_MARK_COLORS.good : pct >= 60 ? STATUS_MARK_COLORS.serious : STATUS_MARK_COLORS.critical);
 
   return (
     <div className="split-grid">
@@ -367,7 +398,7 @@ function ToolComparisonCharts({ tools }) {
             />
             <RTooltip
               formatter={(value) => [`${value} candidates`, 'Attempts']}
-              contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
+              contentStyle={{ background: 'var(--bg-surface)', border: 'none', borderRadius: 12, fontSize: 12, boxShadow: '6px 6px 14px rgba(163,177,198,0.5), -6px -6px 14px rgba(255,255,255,0.85)' }}
             />
             <Bar dataKey="totalTestTakers" fill={CHART_COLORS.primary} radius={[0, 4, 4, 0]} barSize={18}>
               <LabelList dataKey="totalTestTakers" position="right" style={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
@@ -394,7 +425,7 @@ function ToolComparisonCharts({ tools }) {
             />
             <RTooltip
               formatter={(value) => [`${value}%`, 'Avg Score']}
-              contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
+              contentStyle={{ background: 'var(--bg-surface)', border: 'none', borderRadius: 12, fontSize: 12, boxShadow: '6px 6px 14px rgba(163,177,198,0.5), -6px -6px 14px rgba(255,255,255,0.85)' }}
             />
             <Bar dataKey="averageScorePercentage" radius={[0, 4, 4, 0]} barSize={18}>
               {scoreData.map(d => <Cell key={d.id} fill={scoreColor(d.averageScorePercentage)} />)}
@@ -409,24 +440,22 @@ function ToolComparisonCharts({ tools }) {
 
 // Fixed per-tool palette (index-based, stable regardless of sort order) —
 // used by the Overview donut + leaderboard so a tool keeps the same color
-// everywhere on that page.
-const TOOL_PALETTE = [CHART_COLORS.primary, CHART_COLORS.secondary, CHART_COLORS.success, CHART_COLORS.warning, CHART_COLORS.danger];
+// everywhere on that page. Draws straight from CATEGORICAL_PALETTE (8
+// slots, fixed order) rather than a separate 5-color list, so a 6th tool
+// (db6) gets its own slot instead of wrapping around and colliding with
+// tool 1's color.
+const TOOL_PALETTE = CATEGORICAL_PALETTE;
 
-// One gradient per KPI card, same 5-hue family as TOOL_PALETTE (each hue
-// paired with its own darker shade) so the metric-colored KPI row and the
-// tool-colored charts below it read as one palette, not two unrelated
-// color systems on the same page.
-const KPI_GRADIENTS = [
-  'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)', // indigo
-  'linear-gradient(135deg, #22d3ee 0%, #0e7490 100%)', // cyan
-  'linear-gradient(135deg, #34d399 0%, #047857 100%)', // emerald
-  'linear-gradient(135deg, #fb923c 0%, #b45309 100%)', // amber
-  'linear-gradient(135deg, #fb7185 0%, #be123c 100%)', // rose
-  'linear-gradient(135deg, #a78bfa 0%, #6d28d9 100%)', // violet
-  'linear-gradient(135deg, #2dd4bf 0%, #0f766e 100%)', // teal
-  'linear-gradient(135deg, #e879f9 0%, #a21caf 100%)', // fuchsia
-  'linear-gradient(135deg, #38bdf8 0%, #0369a1 100%)'  // sky
-];
+// One soft gradient per KPI card, each a subtle two-stop shade of its own
+// categorical slot (not a separate hue list) — muted enough to sit on the
+// neomorphic surface as a gentle accent chip rather than a loud block,
+// while staying the same palette as the tool/chart colors below it. 9
+// slots (some Analytics KPI rows run to index 8) by cycling back to slot
+// 1 rather than introducing a 9th, off-palette hue.
+const KPI_GRADIENTS = Array.from({ length: 9 }, (_, i) => {
+  const hex = CATEGORICAL_PALETTE[i % CATEGORICAL_PALETTE.length];
+  return `linear-gradient(135deg, ${hex} 0%, ${hex}cc 100%)`;
+});
 
 // Real weighted trend for Total Assessments only — it's a straight sum of
 // per-tool volumes, and each tool already carries a genuine 7-day-vs-
@@ -490,7 +519,7 @@ function ToolShareDonut({ tools }) {
             </Pie>
             <RTooltip
               formatter={(value, name) => [`${value} (${total > 0 ? Math.round((value / total) * 100) : 0}%)`, name]}
-              contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
+              contentStyle={{ background: 'var(--bg-surface)', border: 'none', borderRadius: 12, fontSize: 12, boxShadow: '6px 6px 14px rgba(163,177,198,0.5), -6px -6px 14px rgba(255,255,255,0.85)' }}
             />
           </PieChart>
         </ResponsiveContainer>
@@ -515,10 +544,13 @@ function ToolShareDonut({ tools }) {
 // Score Distribution by Tool — stacked horizontal bar chart. A new chart
 // type on Overview (stacked composition per category), distinct from the
 // donut (composition of one whole) and the trend area chart (time series).
-// Softer, cooler 3-tone scale for this chart specifically — the standard
-// red/amber/green triad read as too alarming stacked wall-to-wall across
-// 5 bars. Still low-to-high ordered, just less "warning siren."
-const SCORE_BAND_COLORS = { low: '#fb923c', medium: '#a78bfa', high: '#22d3ee' };
+// Uses the same status semantics as the score badges elsewhere in the app
+// (low=critical, medium=serious, high=good) instead of an unrelated
+// 3-hue set, so "low score" reads as the same color everywhere on the
+// page — just the softer "serious" status step for medium instead of a
+// full-saturation amber, so a wall of 5 stacked bars doesn't read as a
+// wall of alarms.
+const SCORE_BAND_COLORS = { low: STATUS_MARK_COLORS.critical, medium: STATUS_MARK_COLORS.serious, high: STATUS_MARK_COLORS.good };
 
 // Compact inline stacked bar for table cells — same 3-color language as
 // the Score Composition chart, just small enough to sit in a table row
@@ -583,7 +615,7 @@ function AvgScoreRadial({ tools }) {
             <RadialBar dataKey="value" background={{ fill: 'var(--bg-surface-hover)' }} cornerRadius={6} />
             <RTooltip
               formatter={(value, name, props) => [`${value}%`, props.payload.name]}
-              contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
+              contentStyle={{ background: 'var(--bg-surface)', border: 'none', borderRadius: 12, fontSize: 12, boxShadow: '6px 6px 14px rgba(163,177,198,0.5), -6px -6px 14px rgba(255,255,255,0.85)' }}
             />
           </RadialBarChart>
         </ResponsiveContainer>
@@ -698,7 +730,7 @@ const REVIEW_CATEGORY_ICON = {
 // a tool actually tracks payment, momentum = the real week-over-week
 // volume trend. No revenue or satisfaction weighting — we don't have it.
 const TIER_META = {
-  star: { label: 'Star', color: '#f59e0b', icon: Star, blurb: 'Strong performance, growing' },
+  star: { label: 'Star', color: CATEGORICAL_PALETTE[3], icon: Star, blurb: 'Strong performance, growing' },
   growth: { label: 'Growth', color: CHART_COLORS.secondary, icon: TrendingUp, blurb: 'Growing, performance building' },
   maintain: { label: 'Maintain', color: CHART_COLORS.primary, icon: CheckCircle2, blurb: 'Strong performance, steady' },
   review: { label: 'Review', color: CHART_COLORS.danger, icon: AlertTriangle, blurb: 'Needs a look' }
@@ -1500,9 +1532,9 @@ function App() {
   if (backendError) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: '1.5rem', padding: '2rem', textAlign: 'center' }}>
-        <ShieldAlert size={64} color="#ef4444" />
+        <ShieldAlert size={64} color="var(--accent-danger)" />
         <h1 style={{ fontSize: '2rem', fontWeight: '800' }}>Backend Server Offline</h1>
-        <p style={{ color: '#94a3b8', maxWidth: '500px' }}>
+        <p style={{ color: 'var(--text-muted)', maxWidth: '500px' }}>
           We could not connect to the Express server running on port 5000. Please start the backend server using `npm start` in the `backend` folder first.
         </p>
         <button className="btn btn-primary" onClick={loadInitialData}>
@@ -1752,7 +1784,7 @@ function App() {
             </div>
 
             {loading ? (
-              <div style={{ padding: '4rem', textAlign: 'center', color: '#94a3b8' }}>
+              <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                 <RefreshCw className="animate-spin" size={32} style={{ margin: '0 auto 1rem auto', animation: 'spin 1s linear infinite' }} />
                 Loading aggregated stats...
               </div>
@@ -2104,7 +2136,7 @@ function App() {
                     satisfaction-weighted — we don't have that data. */}
                 <div className="panel">
                   <div className="panel-header">
-                    <h2><PanelIconBadge icon={Star} color="#f59e0b" />Tool Performance Tiers</h2>
+                    <h2><PanelIconBadge icon={Star} color={CATEGORICAL_PALETTE[3]} />Tool Performance Tiers</h2>
                     <span
                       style={{ fontSize: '0.8rem', color: 'var(--accent-primary)', cursor: 'pointer', fontWeight: 600 }}
                       onClick={() => setCurrentView('tool-performance')}
@@ -2352,7 +2384,7 @@ function App() {
                                         <td>{org.organization}</td>
                                         <td>{org.totalAssessments}</td>
                                         <td>{org.averageScore}</td>
-                                        <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                        <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                                           {org.lastActivity ? new Date(org.lastActivity).toLocaleDateString() : 'N/A'}
                                         </td>
                                       </tr>
@@ -2406,7 +2438,7 @@ function App() {
                                         <td>{u.name}</td>
                                         <td>{u.attempts}</td>
                                         <td>{u.averageScore}</td>
-                                        <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                        <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                                           {u.lastActivity ? new Date(u.lastActivity).toLocaleDateString() : 'N/A'}
                                         </td>
                                       </tr>
@@ -2555,7 +2587,7 @@ function App() {
             </div>
 
             {loading ? (
-              <div style={{ padding: '4rem', textAlign: 'center', color: '#94a3b8' }}>
+              <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                 <RefreshCw className="animate-spin" size={32} style={{ margin: '0 auto 1rem auto', animation: 'spin 1s linear infinite' }} />
                 Fetching candidates database...
               </div>
@@ -2812,7 +2844,7 @@ function App() {
 
             <div className="drawer-content">
               {detailsLoading ? (
-                <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                   <RefreshCw className="animate-spin" size={24} style={{ margin: '0 auto 1rem auto', animation: 'spin 1s linear infinite' }} />
                   Fetching candidate responses...
                 </div>

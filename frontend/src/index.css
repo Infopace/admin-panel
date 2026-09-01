@@ -1,43 +1,64 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 :root {
-  --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  
-  /* Color Palette - Premium White & Dark Blue Themes */
-  --bg-primary: #f8fafc;
-  --bg-secondary: #ffffff;
-  --bg-surface: #ffffff;
-  --bg-surface-hover: #f1f5f9;
-  
-  --border-color: #e2e8f0;
-  --border-focus: #6366f1;
-  
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
-  
-  --accent-primary: #4f46e5; /* Indigo */
-  --accent-secondary: #0891b2; /* Cyan */
-  --accent-success: #16a34a; /* Emerald */
-  --accent-warning: #ea580c; /* Amber */
-  --accent-danger: #dc2626; /* Rose */
-  
-  /* Sidebar Specific (Dark Blue Theme) */
-  --sidebar-bg: #0f172a;
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Neomorphic surface — page and every card share this one base tone.
+     Separation comes from a light/dark shadow pair (see --neo-* below),
+     not a fill-contrast boundary or a border, which is the whole point
+     of soft-UI: elements read as molded from the same material. */
+  --bg-primary: #ecf0f6;
+  --bg-secondary: #ecf0f6;
+  --bg-surface: #ecf0f6;
+  --bg-surface-hover: #e2e7f0;
+
+  --border-color: rgba(163, 177, 198, 0.32);
+  --border-focus: #2a78d6;
+
+  --text-primary: #232838;
+  --text-secondary: #5b6478;
+  --text-muted: #8991a6;
+
+  /* Chart-validated palette (dataviz skill): accent-primary/secondary
+     double as categorical identity (chart series, tool colors);
+     success/warning/danger map to the fixed status palette and are
+     never reused as a data-series color. Warning/secondary are stepped
+     darker than the raw chart-mark hex for text-safe contrast — the
+     lighter mark versions (see CHART_COLORS in App.jsx) are for filled
+     shapes that are always paired with a label, never bare text. */
+  --accent-primary: #2a78d6;   /* categorical slot 1 — blue */
+  --accent-secondary: #0d8f73; /* categorical slot 3 family — teal */
+  --accent-success: #0ca30c;   /* status good */
+  --accent-warning: #b8690a;   /* status warning, text-safe step */
+  --accent-danger: #d03b3b;    /* status critical */
+
+  /* Sidebar — kept dark for wayfinding contrast against the light
+     neomorphic surface; the active item gets a pressed/inset treatment
+     instead of a flat highlight color. */
+  --sidebar-bg: #171b28;
   --sidebar-border: rgba(255, 255, 255, 0.08);
   --sidebar-text-primary: #ffffff;
-  --sidebar-text-secondary: #94a3b8;
-  --sidebar-text-muted: #64748b;
+  --sidebar-text-secondary: #9aa3ba;
+  --sidebar-text-muted: #6b7690;
   --sidebar-hover-bg: rgba(255, 255, 255, 0.06);
 
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
-  
-  --radius-sm: 0.375rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1.25rem;
-  
+  /* Neomorphic shadow pairs — light source top-left. "Raised" reads as
+     resting above the surface; "inset" reads as pressed into it (active
+     nav items, pressed buttons, focused inputs). */
+  --neo-shadow-raised-sm: 4px 4px 10px rgba(163, 177, 198, 0.5), -4px -4px 10px rgba(255, 255, 255, 0.85);
+  --neo-shadow-raised: 8px 8px 18px rgba(163, 177, 198, 0.55), -8px -8px 18px rgba(255, 255, 255, 0.9);
+  --neo-shadow-raised-lg: 12px 12px 28px rgba(163, 177, 198, 0.5), -12px -12px 28px rgba(255, 255, 255, 0.9);
+  --neo-shadow-inset-sm: inset 2px 2px 5px rgba(163, 177, 198, 0.45), inset -2px -2px 5px rgba(255, 255, 255, 0.7);
+  --neo-shadow-inset: inset 4px 4px 10px rgba(163, 177, 198, 0.45), inset -4px -4px 10px rgba(255, 255, 255, 0.75);
+
+  --shadow-sm: var(--neo-shadow-raised-sm);
+  --shadow-md: var(--neo-shadow-raised);
+  --shadow-lg: var(--neo-shadow-raised-lg);
+
+  --radius-sm: 0.65rem;
+  --radius-md: 1.15rem;
+  --radius-lg: 1.75rem;
+
   --transition-fast: 0.15s ease;
   --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -111,7 +132,7 @@ body {
   align-items: center;
   justify-content: center;
   color: white;
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 0 20px rgba(42, 120, 214, 0.4);
 }
 
 .logo-text {
@@ -168,9 +189,9 @@ body {
 
 .menu-link.active {
   color: var(--sidebar-text-primary);
-  background: linear-gradient(to right, rgba(99, 102, 241, 0.2), rgba(6, 182, 212, 0.08));
+  background: linear-gradient(to right, rgba(42, 120, 214, 0.22), rgba(13, 143, 115, 0.08));
   border-color: transparent;
-  border-left: 3px solid var(--accent-primary);
+  box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.35), inset -1px -1px 3px rgba(255, 255, 255, 0.05);
 }
 
 /* Sidebar category accordion — nested tool list, indented under its
@@ -252,15 +273,15 @@ body {
 }
 
 .mode-badge.live {
-  background-color: rgba(16, 185, 129, 0.1);
+  background-color: rgba(12, 163, 12, 0.1);
   color: var(--accent-success);
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(12, 163, 12, 0.2);
 }
 
 .mode-badge.mock {
-  background-color: rgba(245, 158, 11, 0.1);
+  background-color: rgba(250, 178, 25, 0.1);
   color: var(--accent-warning);
-  border: 1px solid rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(250, 178, 25, 0.2);
 }
 
 /* Stats Cards Grid */
@@ -273,7 +294,8 @@ body {
 
 .stat-card {
   background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  border: none;
+  box-shadow: var(--neo-shadow-raised-sm);
   padding: 1.5rem;
   border-radius: var(--radius-md);
   transition: var(--transition-normal);
@@ -298,7 +320,7 @@ body {
 
 .stat-card:hover {
   transform: translateY(-4px);
-  border-color: rgba(99, 102, 241, 0.3);
+  border-color: rgba(42, 120, 214, 0.3);
   box-shadow: 0 10px 20px rgba(0,0,0,0.2);
 }
 
@@ -351,7 +373,8 @@ body {
 
 .config-card {
   background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  border: none;
+  box-shadow: var(--neo-shadow-raised);
   padding: 1.75rem;
   border-radius: var(--radius-md);
 }
@@ -386,7 +409,8 @@ body {
 .form-control {
   width: 100%;
   background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  border: none;
+  box-shadow: var(--neo-shadow-inset-sm);
   color: var(--text-primary);
   padding: 0.65rem 0.85rem;
   border-radius: var(--radius-sm);
@@ -398,7 +422,7 @@ body {
 .form-control:focus {
   outline: none;
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 0 0 3px rgba(42, 120, 214, 0.15);
 }
 
 .btn {
@@ -413,34 +437,43 @@ body {
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: var(--transition-fast);
-  border: 1px solid transparent;
+  border: none;
 }
 
 .btn-primary {
   background-color: var(--accent-primary);
   color: white;
+  box-shadow: 4px 4px 10px rgba(42, 120, 214, 0.35), -4px -4px 10px rgba(255, 255, 255, 0.5);
 }
 .btn-primary:hover {
-  background-color: #4f46e5;
-  box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+  box-shadow: 6px 6px 14px rgba(42, 120, 214, 0.45), -6px -6px 14px rgba(255, 255, 255, 0.55);
+}
+.btn-primary:active {
+  box-shadow: inset 3px 3px 7px rgba(0, 0, 0, 0.25), inset -2px -2px 5px rgba(255, 255, 255, 0.15);
 }
 
 .btn-secondary {
   background-color: var(--bg-surface);
   color: var(--text-primary);
-  border-color: var(--border-color);
+  box-shadow: var(--neo-shadow-raised-sm);
 }
 .btn-secondary:hover {
-  background-color: var(--bg-surface-hover);
+  box-shadow: var(--neo-shadow-raised);
+}
+.btn-secondary:active {
+  box-shadow: var(--neo-shadow-inset-sm);
 }
 
 .btn-success {
   background-color: var(--accent-success);
   color: white;
+  box-shadow: 4px 4px 10px rgba(12, 163, 12, 0.35), -4px -4px 10px rgba(255, 255, 255, 0.5);
 }
 .btn-success:hover {
-  background-color: #059669;
-  box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+  box-shadow: 6px 6px 14px rgba(12, 163, 12, 0.45), -6px -6px 14px rgba(255, 255, 255, 0.55);
+}
+.btn-success:active {
+  box-shadow: inset 3px 3px 7px rgba(0, 0, 0, 0.25), inset -2px -2px 5px rgba(255, 255, 255, 0.15);
 }
 
 .btn-sm {
@@ -452,7 +485,8 @@ body {
 /* Candidates Table Section */
 .table-section {
   background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  border: none;
+  box-shadow: var(--neo-shadow-raised);
   border-radius: var(--radius-md);
   overflow: hidden;
   margin-top: 1.5rem;
@@ -474,7 +508,8 @@ body {
   display: flex;
   align-items: center;
   background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  border: none;
+  box-shadow: var(--neo-shadow-inset-sm);
   border-radius: var(--radius-md);
   padding: 0.4rem 0.8rem;
   width: 300px;
@@ -594,9 +629,9 @@ body {
   border-radius: 6px;
 }
 
-.score-badge.high { background-color: rgba(16, 185, 129, 0.1); color: var(--accent-success); }
-.score-badge.medium { background-color: rgba(245, 158, 11, 0.1); color: var(--accent-warning); }
-.score-badge.low { background-color: rgba(239, 68, 68, 0.1); color: var(--accent-danger); }
+.score-badge.high { background-color: rgba(12, 163, 12, 0.1); color: var(--accent-success); }
+.score-badge.medium { background-color: rgba(250, 178, 25, 0.1); color: var(--accent-warning); }
+.score-badge.low { background-color: rgba(208, 59, 59, 0.1); color: var(--accent-danger); }
 
 /* Details Drawer */
 .details-drawer-overlay {
@@ -660,7 +695,8 @@ body {
 
 .candidate-profile-summary {
   background-color: var(--bg-primary);
-  border: 1px solid var(--border-color);
+  border: none;
+  box-shadow: var(--neo-shadow-inset-sm);
   border-radius: var(--radius-md);
   padding: 1.25rem 1.5rem;
   margin-bottom: 2rem;
@@ -700,7 +736,8 @@ body {
 
 .answer-text {
   background-color: var(--bg-primary);
-  border: 1px solid var(--border-color);
+  border: none;
+  box-shadow: var(--neo-shadow-inset-sm);
   padding: 0.75rem 1rem;
   border-radius: var(--radius-sm);
   font-size: 0.9rem;
@@ -724,7 +761,8 @@ body {
 /* SVG Charts CSS Helpers */
 .chart-container {
   background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  border: none;
+  box-shadow: var(--neo-shadow-raised);
   padding: 1.5rem;
   border-radius: var(--radius-md);
   margin-bottom: 2.5rem;
@@ -786,8 +824,8 @@ body {
   justify-content: center;
   min-height: 100vh;
   background-color: var(--sidebar-bg);
-  background-image: radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
-                    radial-gradient(circle at 90% 80%, rgba(8, 145, 178, 0.15) 0%, transparent 40%);
+  background-image: radial-gradient(circle at 10% 20%, rgba(42, 120, 214, 0.15) 0%, transparent 40%),
+                    radial-gradient(circle at 90% 80%, rgba(13, 143, 115, 0.15) 0%, transparent 40%);
   padding: 1.5rem;
 }
 
@@ -819,7 +857,7 @@ body {
   border-radius: var(--radius-md);
   color: white;
   margin-bottom: 1.25rem;
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 0 20px rgba(42, 120, 214, 0.4);
 }
 
 .auth-title {
@@ -882,7 +920,7 @@ body {
   outline: none;
   border-color: var(--border-focus);
   background-color: rgba(15, 23, 42, 0.8);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 0 0 3px rgba(42, 120, 214, 0.15);
 }
 
 .auth-btn {
@@ -903,8 +941,8 @@ body {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  background-color: rgba(220, 38, 38, 0.15);
-  border: 1px solid rgba(220, 38, 38, 0.3);
+  background-color: rgba(208, 59, 59, 0.15);
+  border: 1px solid rgba(208, 59, 59, 0.3);
   padding: 0.75rem 1rem;
   border-radius: var(--radius-md);
   color: #fda4af;
@@ -917,8 +955,8 @@ body {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  background-color: rgba(22, 163, 74, 0.15);
-  border: 1px solid rgba(22, 163, 74, 0.3);
+  background-color: rgba(12, 163, 12, 0.15);
+  border: 1px solid rgba(12, 163, 12, 0.3);
   padding: 0.75rem 1rem;
   border-radius: var(--radius-md);
   color: #a7f3d0;
@@ -937,7 +975,7 @@ body {
 
 .auth-toggle-link:hover {
   color: #22d3ee;
-  text-shadow: 0 0 8px rgba(34, 211, 238, 0.3);
+  text-shadow: 0 0 8px rgba(13, 143, 115, 0.3);
 }
 
 .auth-footer {
@@ -990,7 +1028,8 @@ body {
 
 .panel {
   background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  border: none;
+  box-shadow: var(--neo-shadow-raised);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   padding: 1.5rem;
@@ -1016,7 +1055,8 @@ body {
   display: flex;
   gap: 0.25rem;
   background-color: var(--bg-primary);
-  border: 1px solid var(--border-color);
+  border: none;
+  box-shadow: var(--neo-shadow-inset-sm);
   border-radius: var(--radius-sm);
   padding: 0.25rem;
 }
@@ -1051,7 +1091,8 @@ body {
 /* Recharts custom tooltip (usage trend chart) */
 .chart-tooltip {
   background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  border: none;
+  box-shadow: var(--neo-shadow-raised-sm);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-lg);
   padding: 0.6rem 0.75rem;
@@ -1100,7 +1141,8 @@ body {
 }
 
 .status-tile {
-  border: 1px solid var(--border-color);
+  border: none;
+  box-shadow: var(--neo-shadow-raised-sm);
   border-top: 3px solid var(--border-color);
   border-radius: var(--radius-md);
   background-color: var(--bg-surface);
@@ -1262,7 +1304,8 @@ body {
   font-size: 0.82rem;
   color: var(--text-secondary);
   background-color: var(--bg-primary);
-  border: 1px solid var(--border-color);
+  border: none;
+  box-shadow: var(--neo-shadow-raised-sm);
   border-radius: var(--radius-sm);
   padding: 0.5rem 0.7rem;
 }
@@ -1313,7 +1356,8 @@ body {
 }
 
 .tier-tool-card {
-  border: 1px solid var(--border-color);
+  border: none;
+  box-shadow: var(--neo-shadow-raised-sm);
   border-radius: var(--radius-sm);
   background-color: var(--bg-surface);
   padding: 0.65rem 0.75rem;
@@ -1382,7 +1426,8 @@ body {
    the auth screen elsewhere in this file. */
 .tool-select {
   background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  border: none;
+  box-shadow: var(--neo-shadow-inset-sm);
   color: var(--text-primary);
   border-radius: var(--radius-sm);
   font-size: 0.85rem;
@@ -1394,7 +1439,7 @@ body {
 .tool-select:focus {
   outline: none;
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 0 0 3px rgba(42, 120, 214, 0.15);
 }
 
 /* KPI gradient cards (Overview) */
@@ -1465,11 +1510,11 @@ body {
 /* Direction actually changes color here, not just the arrow icon —
    same translucent-white pill read as identical for up vs. down */
 .kpi-card-trend.up {
-  background-color: rgba(22, 163, 74, 0.85);
+  background-color: rgba(12, 163, 12, 0.85);
 }
 
 .kpi-card-trend.down {
-  background-color: rgba(220, 38, 38, 0.85);
+  background-color: rgba(208, 59, 59, 0.85);
 }
 
 .kpi-card-trend.flat {
@@ -1581,26 +1626,26 @@ body {
 }
 
 .alert-item.critical {
-  background-color: rgba(239, 68, 68, 0.08);
-  border-color: rgba(239, 68, 68, 0.2);
+  background-color: rgba(208, 59, 59, 0.08);
+  border-color: rgba(208, 59, 59, 0.2);
   color: var(--accent-danger);
 }
 
 .alert-item.warning {
-  background-color: rgba(245, 158, 11, 0.08);
-  border-color: rgba(245, 158, 11, 0.2);
+  background-color: rgba(250, 178, 25, 0.08);
+  border-color: rgba(250, 178, 25, 0.2);
   color: var(--accent-warning);
 }
 
 .alert-item.info {
-  background-color: rgba(8, 145, 178, 0.08);
-  border-color: rgba(8, 145, 178, 0.2);
+  background-color: rgba(13, 143, 115, 0.08);
+  border-color: rgba(13, 143, 115, 0.2);
   color: var(--accent-secondary);
 }
 
 .alert-item.ok {
-  background-color: rgba(16, 185, 129, 0.08);
-  border-color: rgba(16, 185, 129, 0.2);
+  background-color: rgba(12, 163, 12, 0.08);
+  border-color: rgba(12, 163, 12, 0.2);
   color: var(--accent-success);
 }
 
@@ -1618,7 +1663,8 @@ body {
 }
 
 .health-card {
-  border: 1px solid var(--border-color);
+  border: none;
+  box-shadow: var(--neo-shadow-raised-sm);
   border-radius: var(--radius-sm);
   padding: 1rem;
   display: flex;
@@ -1645,9 +1691,9 @@ body {
   border-radius: 50px;
 }
 
-.health-status-pill.healthy { background-color: rgba(16, 185, 129, 0.1); color: var(--accent-success); }
-.health-status-pill.warning { background-color: rgba(245, 158, 11, 0.1); color: var(--accent-warning); }
-.health-status-pill.critical { background-color: rgba(239, 68, 68, 0.1); color: var(--accent-danger); }
+.health-status-pill.healthy { background-color: rgba(12, 163, 12, 0.1); color: var(--accent-success); }
+.health-status-pill.warning { background-color: rgba(250, 178, 25, 0.1); color: var(--accent-warning); }
+.health-status-pill.critical { background-color: rgba(208, 59, 59, 0.1); color: var(--accent-danger); }
 .health-status-pill.mock { background-color: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
 .health-status-pill.unknown { background-color: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
 
@@ -1704,8 +1750,8 @@ body {
 
 /* AI Profile card (candidate drawer) */
 .ai-profile-card {
-  background: linear-gradient(135deg, rgba(79, 70, 229, 0.06), rgba(8, 145, 178, 0.04));
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  background: linear-gradient(135deg, rgba(42, 120, 214, 0.06), rgba(13, 143, 115, 0.04));
+  border: 1px solid rgba(42, 120, 214, 0.2);
   border-radius: var(--radius-md);
   padding: 1.25rem;
   margin-bottom: 1.5rem;
@@ -1724,7 +1770,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.02em;
   color: var(--accent-primary);
-  background-color: rgba(79, 70, 229, 0.1);
+  background-color: rgba(42, 120, 214, 0.1);
   padding: 0.15rem 0.5rem;
   border-radius: 50px;
 }
@@ -1796,7 +1842,8 @@ body {
 /* Analytics: particular-tool status header (doc section 5) */
 .tool-status-header {
   background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  border: none;
+  box-shadow: var(--neo-shadow-raised);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   padding: 1.5rem;
