@@ -22,6 +22,7 @@ const db3 = require('./adapters/db3');
 const db4 = require('./adapters/db4');
 const db5 = require('./adapters/db5');
 const db6 = require('./adapters/db6');
+const ga4 = require('./lib/ga4');
 
 const ADAPTERS = { db1, db2, db3, db4, db5, db6 };
 
@@ -1003,7 +1004,9 @@ app.get('/api/assessments/:dbId/candidates/:candidateId/pdf', async (req, res) =
 // Payment Monitoring — user-requested addition, outside the original
 // DASHBOARD.docx scope. Paid/unpaid counts + conversion rate for every
 // supported tool; revenue is included only where a dollar amount
-// column exists (db1). db2/db5 have no payment column at all.
+// column exists (db1). db2/db5's payment columns are unverified guesses
+// (see the comment above getPaymentSummary in each adapter) — they were
+// added for schema-extend parity with db4/db6, not confirmed live.
 app.get('/api/assessments/:dbId/payments', async (req, res) => {
   const { dbId } = req.params;
   const adapter = ADAPTERS[dbId];
@@ -1026,6 +1029,68 @@ app.get('/api/assessments/:dbId/payments', async (req, res) => {
   }
 
   return res.status(200).json({ supported: false });
+});
+
+// Acquisition monitoring (visitors, bounce rate, landing conversion) —
+// see lib/ga4.js for why this can't come from Supabase: none of the 6
+// adapters see a visitor who didn't complete an assessment. Sourced from
+// the GA4 Data API once GA4_SERVICE_ACCOUNT_KEY + a per-tool
+// GA4_PROPERTY_ID_<n> are configured; until then every tool reports
+// supported: true, mode: 'mock' with all-zero/null values rather than a
+// fabricated traffic number that could be mistaken for a real signal.
+app.get('/api/assessments/:dbId/acquisition', async (req, res) => {
+  const { dbId } = req.params;
+  if (!ADAPTERS[dbId]) {
+    return res.status(400).json({ error: 'Invalid database identifier.' });
+  }
+
+  if (!ga4.isConfigured(dbId)) {
+    return res.json({ supported: true, mode: 'mock', ...ga4.getMockAcquisitionSummary() });
+  }
+
+  try {
+    const summary = await ga4.getAcquisitionSummary(dbId, Number(req.query.days) || 7);
+    res.json({ supported: true, mode: 'live', ...summary });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Cross-tool acquisition summary — same "not configured yet" fallback
+// per tool, just merged into one call for the Analytics overview panel.
+app.get('/api/acquisition', async (req, res) => {
+  try {
+    const days = Number(req.query.days) || 7;
+    const tools = [];
+    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5', 'db6']) {
+      const adapter = ADAPTERS[dbId];
+      const configured = ga4.isConfigured(dbId);
+      let summary;
+      let mode;
+      if (!configured) {
+        summary = ga4.getMockAcquisitionSummary();
+        mode = 'mock';
+      } else {
+        try {
+          summary = await ga4.getAcquisitionSummary(dbId, days);
+          mode = 'live';
+        } catch (err) {
+          console.warn(`GA4 acquisition summary failed for ${dbId}:`, err.message);
+          summary = ga4.getMockAcquisitionSummary();
+          mode = 'error';
+        }
+      }
+      tools.push({ id: dbId, name: adapter.metadata.name, mode, ...summary });
+    }
+
+    res.json({
+      configuredCount: tools.filter(t => t.mode === 'live').length,
+      totalTools: tools.length,
+      tools
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Tool-Specific Dimensions (doc section 10) — only implemented where the

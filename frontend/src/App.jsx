@@ -784,6 +784,58 @@ function OrgBreadthChart({ data }) {
   );
 }
 
+// Acquisition (visitors, bounce rate, landing conversion) — sourced from
+// GA4 per tool once GA4_SERVICE_ACCOUNT_KEY + GA4_PROPERTY_ID_<n> are
+// configured on the backend. Nothing in any Supabase adapter can see a
+// visitor who never completed an assessment, so until GA4 is wired up
+// every row here is "not connected yet," not a fabricated number.
+function AcquisitionPanel({ data }) {
+  if (!data) return <div className="trend-chart-empty">Loading acquisition data...</div>;
+
+  return (
+    <div>
+      <div className="org-breadth-headline">
+        <strong>{data.configuredCount} / {data.totalTools}</strong> tools connected to GA4
+      </div>
+      {data.configuredCount === 0 && (
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0 0 0.75rem' }}>
+          No tool has GA4 wired up yet — none of the 6 candidate-facing sites run analytics today, so this
+          can't show real traffic. Add the GA4 snippet to a site, set GA4_PROPERTY_ID_&lt;n&gt; and
+          GA4_SERVICE_ACCOUNT_KEY on the backend, and its row goes live automatically.
+        </p>
+      )}
+      <div className="table-container">
+        <table className="custom-table">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Status</th>
+              <th>Visitors (7d)</th>
+              <th>Bounce Rate</th>
+              <th>Landing → Started</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.tools.map(t => (
+              <tr key={t.id}>
+                <td>{t.name}</td>
+                <td>
+                  <span className={`mode-badge ${t.mode === 'live' ? 'live' : 'mock'}`}>
+                    {t.mode === 'live' ? 'Connected' : 'Not connected'}
+                  </span>
+                </td>
+                <td>{t.mode === 'live' ? t.activeUsers : '—'}</td>
+                <td>{t.bounceRate !== null ? `${t.bounceRate}%` : '—'}</td>
+                <td>{t.landingConversionRate !== null ? `${t.landingConversionRate}%` : 'No assessment_started event yet'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function WeeklyReviewRow({ row }) {
   const status = REVIEW_STATUS[row.status] || REVIEW_STATUS.on_track;
   const Icon = REVIEW_CATEGORY_ICON[row.category] || ListChecks;
@@ -862,6 +914,7 @@ function App() {
   const [entitySummary, setEntitySummary] = useState(null);
   const [toolScoring, setToolScoring] = useState(null);
   const [orgBreadth, setOrgBreadth] = useState(null);
+  const [acquisition, setAcquisition] = useState(null);
   const [weeklyReview, setWeeklyReview] = useState(null);
   const [weeklyReviewLoading, setWeeklyReviewLoading] = useState(false);
 
@@ -1044,14 +1097,16 @@ function App() {
     if (!token || currentView !== 'analytics') return;
     const fetchToolScoringAndBreadth = async () => {
       try {
-        const [scoringRes, breadthRes] = await Promise.all([
+        const [scoringRes, breadthRes, acquisitionRes] = await Promise.all([
           authFetch(`${API_BASE}/tool-scoring`),
-          authFetch(`${API_BASE}/org-breadth`)
+          authFetch(`${API_BASE}/org-breadth`),
+          authFetch(`${API_BASE}/acquisition`)
         ]);
         setToolScoring((await scoringRes.json()).tools || []);
         setOrgBreadth(await breadthRes.json());
+        setAcquisition(await acquisitionRes.json());
       } catch (err) {
-        console.error('Error fetching tool scoring / org breadth:', err);
+        console.error('Error fetching tool scoring / org breadth / acquisition:', err);
       }
     };
     fetchToolScoringAndBreadth();
@@ -1897,6 +1952,16 @@ function App() {
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>How many of the 5 tools each org actually uses</span>
                   </div>
                   {orgBreadth ? <OrgBreadthChart data={orgBreadth} /> : <div className="trend-chart-empty">Loading org breadth...</div>}
+                </div>
+
+                {/* Acquisition — visitors/bounce/landing conversion via GA4, not
+                    Supabase (see AcquisitionPanel comment for why) */}
+                <div className="panel">
+                  <div className="panel-header">
+                    <h2><PanelIconBadge icon={Globe} color={CHART_COLORS.warning} />Acquisition</h2>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Traffic in from GA4, per tool</span>
+                  </div>
+                  <AcquisitionPanel data={acquisition} />
                 </div>
 
                 {/* Live Activity + Attention Required (doc sections 6, 15) */}
