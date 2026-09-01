@@ -534,10 +534,24 @@ app.get('/api/overview/summary', async (req, res) => {
 // is a separate system, so the same org/user name appearing in two
 // tools isn't necessarily the same real-world entity. Only counts
 // live tools; mock-mode org/user breakdowns are empty anyway.
+//
+// Also reports activeUsers30d/activeOrgs30d (last-activity within 30
+// days, from the same breakdowns above — no new instrumentation) and a
+// blended repeat-assessment retention cohort (D1/D7/D30) from every tool
+// whose adapter exposes getRetentionCohort (db1, db5 today). Retention
+// here means "came back for another completed assessment," not
+// login/session retention — no adapter schema has session data.
 app.get('/api/overview/entities', async (req, res) => {
   try {
     let totalOrganizations = 0;
     let totalUsers = 0;
+    let activeOrgs30d = 0;
+    let activeUsers30d = 0;
+    let cohortTotal = 0, d1Weighted = 0, d7Weighted = 0, d30Weighted = 0;
+
+    const now = Date.now();
+    const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+    const isActive = lastActivity => lastActivity && (now - new Date(lastActivity).getTime()) <= THIRTY_DAYS;
 
     for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5', 'db6']) {
       const adapter = ADAPTERS[dbId];
@@ -548,6 +562,7 @@ app.get('/api/overview/entities', async (req, res) => {
         try {
           const orgs = await adapter.getOrgBreakdown(client);
           totalOrganizations += orgs.length;
+          activeOrgs30d += orgs.filter(o => isActive(o.lastActivity)).length;
         } catch (err) {
           console.warn(`getOrgBreakdown failed for ${dbId} during entities summary:`, err.message);
         }
@@ -557,15 +572,40 @@ app.get('/api/overview/entities', async (req, res) => {
         try {
           const result = await adapter.getUserBreakdown(client);
           totalUsers += result.totalUniqueUsers;
+          activeUsers30d += result.users.filter(u => isActive(u.lastActivity)).length;
         } catch (err) {
           console.warn(`getUserBreakdown failed for ${dbId} during entities summary:`, err.message);
+        }
+      }
+
+      if (typeof adapter.getRetentionCohort === 'function') {
+        try {
+          const r = await adapter.getRetentionCohort(client);
+          cohortTotal += r.totalUsers;
+          d1Weighted += (r.d1Pct / 100) * r.totalUsers;
+          d7Weighted += (r.d7Pct / 100) * r.totalUsers;
+          d30Weighted += (r.d30Pct / 100) * r.totalUsers;
+        } catch (err) {
+          console.warn(`getRetentionCohort failed for ${dbId} during entities summary:`, err.message);
         }
       }
     }
 
     const totalReports = readReports().filter(r => r.status === 'success').length;
 
-    res.json({ totalOrganizations, totalUsers, totalReports });
+    res.json({
+      totalOrganizations,
+      totalUsers,
+      totalReports,
+      activeOrgs30d,
+      activeUsers30d,
+      retention: cohortTotal > 0 ? {
+        cohortSize: cohortTotal,
+        d1Pct: Math.round((d1Weighted / cohortTotal) * 100),
+        d7Pct: Math.round((d7Weighted / cohortTotal) * 100),
+        d30Pct: Math.round((d30Weighted / cohortTotal) * 100)
+      } : null
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

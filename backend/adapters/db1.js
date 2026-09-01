@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { buildRetentionCohort } = require('./_retention');
 
 /**
  * DB1 Adapter: Creative and Innovation (CII)
@@ -601,6 +602,23 @@ async function getUserBreakdown(supabase) {
   };
 }
 
+/**
+ * Repeat-assessment retention cohort (Phase 6).
+ * For each user with >=1 completed result, checks whether they returned
+ * for another completed assessment within 1/7/30 days of their FIRST
+ * completion. This is an assessment-return proxy, not login-based
+ * product retention (no session/login events exist in this schema) —
+ * label it as such wherever it's shown.
+ */
+async function getRetentionCohort(supabase) {
+  const { data, error } = await supabase
+    .from(TABLES.RESULTS)
+    .select('user_id, completed_at');
+
+  if (error) throw error;
+  return buildRetentionCohort(data, 'user_id', 'completed_at');
+}
+
 module.exports = {
   getCandidates,
   getCandidateDetails,
@@ -608,6 +626,7 @@ module.exports = {
   getMockCandidateDetails,
   getOrgBreakdown,
   getUserBreakdown,
+  getRetentionCohort,
   getDimensionAverages,
   getMockDimensionAverages,
   getPaymentSummary,

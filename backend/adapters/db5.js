@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { buildRetentionCohort } = require('./_retention');
 
 /**
  * DB5 Adapter: Venture Risk Assessment
@@ -293,6 +294,20 @@ async function getOrgBreakdown(supabase) {
   })).sort((a, b) => b.totalAssessments - a.totalAssessments);
 }
 
+/**
+ * Repeat-assessment retention cohort (Phase 6) — see db1.js for the
+ * definition; same assessment-return proxy, no login/session data exists
+ * in this schema either.
+ */
+async function getRetentionCohort(supabase) {
+  const { data, error } = await supabase
+    .from(TABLES.ASSESSMENTS)
+    .select('user_id, created_at');
+
+  if (error) throw error;
+  return buildRetentionCohort(data, 'user_id', 'created_at');
+}
+
 module.exports = {
   getCandidates,
   getCandidateDetails,
@@ -300,6 +315,7 @@ module.exports = {
   getMockCandidateDetails,
   getUserBreakdown,
   getOrgBreakdown,
+  getRetentionCohort,
   metadata: {
     name: 'Venture Risk Assessment',
     category: 'AI Assessment',

@@ -1575,9 +1575,9 @@ function App() {
                     <KpiCard
                       icon={User}
                       gradient={KPI_GRADIENTS[4]}
-                      label="Active Users"
-                      value={entitySummary ? entitySummary.totalUsers : '—'}
-                      sub="Across live-connected tools"
+                      label="Active Users (30d)"
+                      value={entitySummary ? entitySummary.activeUsers30d : '—'}
+                      sub={entitySummary ? `${entitySummary.totalUsers} unique all-time` : 'Loading...'}
                     />
                   </div>
                 )}
@@ -1762,10 +1762,17 @@ function App() {
                     <KpiCard icon={Database} gradient={KPI_GRADIENTS[2]} label="Live Connections" value={`${summaryData.liveToolsCount} / ${summaryData.totalTools}`} sub={`${summaryData.mockToolsCount} using mock data`} />
                     <KpiCard icon={FileCheck2} gradient={KPI_GRADIENTS[3]} label="Reports Generated" value={reportsSummary ? reportsSummary.totalGenerated : '—'} sub={reportsSummary ? `${reportsSummary.successRate}% success rate` : 'Loading...'} />
                     <KpiCard icon={RefreshCw} gradient={KPI_GRADIENTS[4]} label="Reports Pending" value={0} sub="Always 0 — generated synchronously, no queue exists" />
-                    <KpiCard icon={User} gradient={KPI_GRADIENTS[5]} label="Active Users" value={entitySummary ? entitySummary.totalUsers : '—'} sub="Across live-connected tools" />
-                    <KpiCard icon={BookOpen} gradient={KPI_GRADIENTS[6]} label="Active Organizations" value={entitySummary ? entitySummary.totalOrganizations : '—'} sub="Across live-connected tools" />
+                    <KpiCard icon={User} gradient={KPI_GRADIENTS[5]} label="Active Users (30d)" value={entitySummary ? entitySummary.activeUsers30d : '—'} sub={entitySummary ? `${entitySummary.totalUsers} unique all-time` : 'Loading...'} />
+                    <KpiCard icon={BookOpen} gradient={KPI_GRADIENTS[6]} label="Active Organizations (30d)" value={entitySummary ? entitySummary.activeOrgs30d : '—'} sub={entitySummary ? `${entitySummary.totalOrganizations} unique all-time` : 'Loading...'} />
                     <KpiCard icon={AlertCircle} gradient={KPI_GRADIENTS[7]} label="Failed Requests" value={healthData ? Object.values(healthData).reduce((sum, h) => sum + h.errors, 0) : '—'} sub="DB query errors, not assessment failures" />
                     <KpiCard icon={Calendar} gradient={KPI_GRADIENTS[8]} label="Last Activity" value={<span style={{ fontSize: '1.15rem' }}>{summaryData.lastActivity ? new Date(summaryData.lastActivity).toLocaleString() : 'No activity yet'}</span>} sub="Most recent across tools" />
+                    <KpiCard
+                      icon={RefreshCw}
+                      gradient={KPI_GRADIENTS[0]}
+                      label="D30 Repeat-Assessment Rate"
+                      value={entitySummary && entitySummary.retention ? `${entitySummary.retention.d30Pct}%` : 'N/A'}
+                      sub={entitySummary && entitySummary.retention ? `of ${entitySummary.retention.cohortSize} tracked users came back within 30 days` : 'No tool with a stable user id has live data yet'}
+                    />
                   </div>
                 )}
 
