@@ -28,7 +28,9 @@ import {
   ListChecks,
   CreditCard,
   Globe,
-  CheckCircle2
+  CheckCircle2,
+  Star,
+  Building2
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -624,7 +626,9 @@ function StatusGrid({ healthData }) {
               <span className="status-tile-name">{h.name}</span>
             </div>
             <div className="status-tile-meta">
-              {h.calls > 0 ? `${h.avgLatencyMs}ms avg · ${h.errorRate}% errors` : 'No live queries yet'}
+              {h.calls > 0
+                ? `${h.avgLatencyMs}ms avg${h.p95LatencyMs !== null ? ` · ${h.p95LatencyMs}ms p95` : ''} · ${h.errorRate}% errors`
+                : 'No live queries yet'}
             </div>
             <div className="status-tile-footer">
               <span className={`health-status-pill ${h.status}`}>{h.status}</span>
@@ -682,9 +686,103 @@ const REVIEW_CATEGORY_ICON = {
   errors: AlertTriangle,
   payments: CreditCard,
   reports: FileCheck2,
+  performance: Star,
+  latency: HeartPulse,
   availability: Globe,
   dataSource: Database
 };
+
+// Tool scoring/ranking (Star/Growth/Maintain/Review) — a 4-column board,
+// one card per tool, grouped by the tier the backend computed. Narrow and
+// honest on purpose: performance = score + payment conversion only where
+// a tool actually tracks payment, momentum = the real week-over-week
+// volume trend. No revenue or satisfaction weighting — we don't have it.
+const TIER_META = {
+  star: { label: 'Star', color: '#f59e0b', icon: Star, blurb: 'Strong performance, growing' },
+  growth: { label: 'Growth', color: CHART_COLORS.secondary, icon: TrendingUp, blurb: 'Growing, performance building' },
+  maintain: { label: 'Maintain', color: CHART_COLORS.primary, icon: CheckCircle2, blurb: 'Strong performance, steady' },
+  review: { label: 'Review', color: CHART_COLORS.danger, icon: AlertTriangle, blurb: 'Needs a look' }
+};
+
+function ToolTierBoard({ tools }) {
+  if (!tools || tools.length === 0) return null;
+  return (
+    <div className="tier-board">
+      {Object.keys(TIER_META).map(tierKey => {
+        const meta = TIER_META[tierKey];
+        const Icon = meta.icon;
+        const toolsInTier = tools.filter(t => t.tier === tierKey);
+        return (
+          <div className="tier-column" key={tierKey}>
+            <div className="tier-column-header" style={{ borderTopColor: meta.color }}>
+              <span className="panel-icon-badge" style={{ background: meta.color, marginRight: '0.4rem' }}>
+                <Icon size={13} />
+              </span>
+              <div>
+                <div className="tier-column-title">{meta.label}</div>
+                <div className="tier-column-blurb">{meta.blurb}</div>
+              </div>
+            </div>
+            {toolsInTier.length === 0 ? (
+              <div className="tier-column-empty">No tools here</div>
+            ) : (
+              toolsInTier.map(tool => (
+                <div className="tier-tool-card" key={tool.id} title={tool.reason}>
+                  <div className="tier-tool-name">{tool.name}</div>
+                  <div className="tier-tool-meta">
+                    <span>{tool.usage} assessments</span>
+                    {tool.performanceScore !== null && <span>{tool.performanceScore}/100</span>}
+                    <TrendIndicator trend={tool.trend} />
+                  </div>
+                  {tool.hasPaymentData && (
+                    <div className="tier-tool-payment">{tool.paymentRate}% payment conversion</div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Org tool-usage breadth — how many of the 5 tools each org actually
+// uses, matched by organization name across the separate per-tool org
+// breakdowns (not a verified cross-system identity match).
+function OrgBreadthChart({ data }) {
+  if (!data || data.totalOrgs === 0) {
+    return <div className="trend-chart-empty">No organization data available across live-connected tools yet.</div>;
+  }
+  const chartData = data.distribution.map(d => ({ ...d, label: `${d.toolCount} tool${d.toolCount === 1 ? '' : 's'}` }));
+  return (
+    <div>
+      <div className="org-breadth-headline">
+        <strong>{data.lowUsagePercentage}%</strong> of organizations use only 1–2 tools
+      </div>
+      <ResponsiveContainer width="100%" height={Math.max(chartData.length * 38, 160)}>
+        <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 24, left: 0, bottom: 0 }}>
+          <XAxis type="number" allowDecimals={false} hide />
+          <YAxis
+            type="category"
+            dataKey="label"
+            width={70}
+            tick={{ fontSize: 12, fill: 'var(--text-secondary)' }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <RTooltip
+            formatter={(value, name, props) => [`${value} orgs (${props.payload.percentage}%)`, 'Organizations']}
+            contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12 }}
+          />
+          <Bar dataKey="orgCount" fill={CHART_COLORS.primary} radius={[0, 4, 4, 0]} barSize={16}>
+            <LabelList dataKey="orgCount" position="right" style={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
 
 function WeeklyReviewRow({ row }) {
   const status = REVIEW_STATUS[row.status] || REVIEW_STATUS.on_track;
@@ -762,6 +860,8 @@ function App() {
   const [healthData, setHealthData] = useState(null);
   const [reportsSummary, setReportsSummary] = useState(null);
   const [entitySummary, setEntitySummary] = useState(null);
+  const [toolScoring, setToolScoring] = useState(null);
+  const [orgBreadth, setOrgBreadth] = useState(null);
   const [weeklyReview, setWeeklyReview] = useState(null);
   const [weeklyReviewLoading, setWeeklyReviewLoading] = useState(false);
 
@@ -936,6 +1036,25 @@ function App() {
       }
     };
     fetchAnalyticsCrossTool();
+  }, [token, currentView]);
+
+  // Tool scoring (Star/Growth/Maintain/Review) + org tool-usage breadth —
+  // only rendered on the Analytics all-tools view, so only fetched there.
+  useEffect(() => {
+    if (!token || currentView !== 'analytics') return;
+    const fetchToolScoringAndBreadth = async () => {
+      try {
+        const [scoringRes, breadthRes] = await Promise.all([
+          authFetch(`${API_BASE}/tool-scoring`),
+          authFetch(`${API_BASE}/org-breadth`)
+        ]);
+        setToolScoring((await scoringRes.json()).tools || []);
+        setOrgBreadth(await breadthRes.json());
+      } catch (err) {
+        console.error('Error fetching tool scoring / org breadth:', err);
+      }
+    };
+    fetchToolScoringAndBreadth();
   }, [token, currentView]);
 
   // Weekly PM Review — same alert signals as Analytics/Overview, just
@@ -1750,6 +1869,27 @@ function App() {
                       </tbody>
                     </table>
                   </div>
+                </div>
+
+                {/* Tool Scoring/Ranking — Star/Growth/Maintain/Review tiers,
+                    computed from usage + score + payment conversion (where
+                    it exists) + real week-over-week trend. Not revenue- or
+                    satisfaction-weighted — we don't have that data. */}
+                <div className="panel">
+                  <div className="panel-header">
+                    <h2><PanelIconBadge icon={Star} color="#f59e0b" />Tool Performance Tiers</h2>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Usage + score + payment conversion, not revenue-weighted</span>
+                  </div>
+                  {toolScoring ? <ToolTierBoard tools={toolScoring} /> : <div className="trend-chart-empty">Loading tool tiers...</div>}
+                </div>
+
+                {/* Org Tool-Usage Breadth — cross-tool adoption depth per org */}
+                <div className="panel">
+                  <div className="panel-header">
+                    <h2><PanelIconBadge icon={Building2} color={CHART_COLORS.secondary} />Org Tool Adoption</h2>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>How many of the 5 tools each org actually uses</span>
+                  </div>
+                  {orgBreadth ? <OrgBreadthChart data={orgBreadth} /> : <div className="trend-chart-empty">Loading org breadth...</div>}
                 </div>
 
                 {/* Live Activity + Attention Required (doc sections 6, 15) */}

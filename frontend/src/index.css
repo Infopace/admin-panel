@@ -1271,6 +1271,88 @@ body {
   color: var(--text-primary);
 }
 
+/* Tool Performance Tiers — Star/Growth/Maintain/Review board, one column
+   per tier, tool cards stacked underneath. */
+.tier-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.tier-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.tier-column-header {
+  display: flex;
+  align-items: center;
+  border-top: 3px solid transparent;
+  padding-top: 0.6rem;
+}
+
+.tier-column-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.tier-column-blurb {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.tier-column-empty {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+  text-align: center;
+}
+
+.tier-tool-card {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface);
+  padding: 0.65rem 0.75rem;
+}
+
+.tier-tool-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.3rem;
+}
+
+.tier-tool-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.tier-tool-payment {
+  margin-top: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+/* Org Tool Adoption breadth chart */
+.org-breadth-headline {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+}
+
+.org-breadth-headline strong {
+  font-size: 1.1rem;
+  color: var(--text-primary);
+}
+
 /* Analytics tool-picker dropdown — deliberately its own class rather than
    .form-control, which has a conflicting dark-theme definition scoped to
    the auth screen elsewhere in this file. */

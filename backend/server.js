@@ -123,8 +123,11 @@ function logReportEvent(entry) {
 // unhealthy right now," which is what the health panel needs.
 // -------------------------------------------------------------
 const healthStats = {};
+// Rolling sample of the most recent call latencies, capped so memory
+// stays bounded — enough to compute a real P95, not just a running average.
+const MAX_LATENCY_SAMPLES = 200;
 for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
-  healthStats[dbId] = { calls: 0, errors: 0, totalLatencyMs: 0, lastError: null, lastErrorAt: null, lastSuccessAt: null };
+  healthStats[dbId] = { calls: 0, errors: 0, totalLatencyMs: 0, latencies: [], lastError: null, lastErrorAt: null, lastSuccessAt: null };
 }
 
 function recordHealth(dbId, { ok, latencyMs, error }) {
@@ -132,6 +135,8 @@ function recordHealth(dbId, { ok, latencyMs, error }) {
   if (!stat) return;
   stat.calls++;
   stat.totalLatencyMs += latencyMs;
+  stat.latencies.push(latencyMs);
+  if (stat.latencies.length > MAX_LATENCY_SAMPLES) stat.latencies.shift();
   if (ok) {
     stat.lastSuccessAt = new Date().toISOString();
   } else {
@@ -139,6 +144,15 @@ function recordHealth(dbId, { ok, latencyMs, error }) {
     stat.lastError = error;
     stat.lastErrorAt = new Date().toISOString();
   }
+}
+
+// Nearest-rank percentile over a sample array (not interpolated — simple
+// and good enough for a health dashboard, not a stats package).
+function percentile(samples, p) {
+  if (!samples || samples.length === 0) return null;
+  const sorted = [...samples].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1);
+  return Math.round(sorted[Math.max(0, idx)]);
 }
 
 // Authentication Middleware
@@ -346,6 +360,65 @@ function computeTrend(candidates) {
   return { direction: changePercent > 0 ? 'up' : changePercent < 0 ? 'down' : 'flat', changePercent };
 }
 
+// Payment conversion for one tool, live-mode only — mirrors the same
+// >=5-submissions gate used by the alerts panel so a single paid/unpaid
+// submission doesn't produce a misleading 0%/100% rate. Returns null when
+// the adapter has no payment concept or there isn't enough live data yet.
+const MIN_PAYMENT_SAMPLE = 5;
+async function getToolPaymentRate(dbId, adapter) {
+  if (typeof adapter.getPaymentSummary !== 'function') return null;
+  const client = getSupabaseClient(dbId);
+  if (!client) return null;
+  try {
+    const payment = await adapter.getPaymentSummary(client);
+    const total = payment.paidCount + payment.unpaidCount;
+    return total >= MIN_PAYMENT_SAMPLE ? payment.paymentRate : null;
+  } catch (err) {
+    console.warn(`Payment summary failed for ${dbId} during tool scoring:`, err.message);
+    return null;
+  }
+}
+
+// Tool scoring/ranking (Star/Growth/Maintain/Review) — an honest, narrow
+// composite: performance = average of score quality and payment
+// conversion (only where the tool actually tracks payment), momentum =
+// the real 7-day-vs-prior-7-day volume trend already computed above.
+// Deliberately NOT revenue-weighted or satisfaction-weighted — we don't
+// have revenue or NPS data for most tools, so those never entered the
+// score in the first place, rather than being estimated.
+const MIN_SCORING_SAMPLE = 5;
+const PERFORMANCE_THRESHOLD = 55;
+
+function computeToolTier({ stats, trend, paymentRate }) {
+  if (stats.totalTestTakers < MIN_SCORING_SAMPLE) {
+    return { tier: 'review', performanceScore: null, reason: `Not enough data yet (${stats.totalTestTakers} assessment${stats.totalTestTakers === 1 ? '' : 's'} — need ${MIN_SCORING_SAMPLE}+)` };
+  }
+
+  const metrics = [stats.averageScorePercentage];
+  if (paymentRate !== null) metrics.push(paymentRate);
+  const performanceScore = Math.round(metrics.reduce((a, b) => a + b, 0) / metrics.length);
+  const strongPerformance = performanceScore >= PERFORMANCE_THRESHOLD;
+  const positiveMomentum = trend.direction === 'up';
+
+  let tier;
+  let reason;
+  if (strongPerformance && positiveMomentum) {
+    tier = 'star';
+    reason = `Strong performance (${performanceScore}/100) and growing (${trend.changePercent > 0 ? '+' : ''}${trend.changePercent}% vs prior week)`;
+  } else if (strongPerformance) {
+    tier = 'maintain';
+    reason = `Strong performance (${performanceScore}/100), volume ${trend.direction === 'down' ? 'declining' : 'steady'}`;
+  } else if (positiveMomentum) {
+    tier = 'growth';
+    reason = `Growing volume (${trend.changePercent > 0 ? '+' : ''}${trend.changePercent}%) but performance still building (${performanceScore}/100)`;
+  } else {
+    tier = 'review';
+    reason = `Performance (${performanceScore}/100) and volume both need a look`;
+  }
+
+  return { tier, performanceScore, reason };
+}
+
 // Fetch (live-or-mock) candidates for one adapter, same fallback logic
 // used everywhere else in this file. Live attempts are timed and
 // recorded into healthStats regardless of outcome.
@@ -491,6 +564,83 @@ app.get('/api/overview/entities', async (req, res) => {
     const totalReports = readReports().filter(r => r.status === 'success').length;
 
     res.json({ totalOrganizations, totalUsers, totalReports });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Tool scoring/ranking — Star/Growth/Maintain/Review tiers. See
+// computeToolTier() above for exactly what does and doesn't feed the
+// composite (no revenue or satisfaction data — most tools don't have it).
+app.get('/api/tool-scoring', async (req, res) => {
+  try {
+    const tools = [];
+    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
+      const { adapter, candidates, isMock } = await fetchCandidatesForTool(dbId);
+      const stats = computeToolStats(candidates);
+      const trend = computeTrend(candidates);
+      const paymentRate = isMock ? null : await getToolPaymentRate(dbId, adapter);
+      const { tier, performanceScore, reason } = computeToolTier({ stats, trend, paymentRate });
+
+      tools.push({
+        id: dbId,
+        name: adapter.metadata.name,
+        category: adapter.metadata.category || 'Uncategorized',
+        mode: isMock ? 'mock' : 'live',
+        usage: stats.totalTestTakers,
+        avgScorePercentage: stats.averageScorePercentage,
+        paymentRate,
+        hasPaymentData: paymentRate !== null,
+        trend,
+        performanceScore,
+        tier,
+        reason
+      });
+    }
+    res.json({ tools });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Org tool-usage breadth ("N% of orgs use only 1-2 tools") — aggregates
+// the per-tool org breakdowns already fetched for Organization Monitoring
+// into a cross-tool view. Matches organizations by name across the 5
+// separate Supabase projects, which is the best available signal, not a
+// verified identity match — the same caveat /api/overview/entities notes.
+app.get('/api/org-breadth', async (req, res) => {
+  try {
+    const orgToolCount = {}; // org name -> Set of dbIds it appears in
+
+    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
+      const adapter = ADAPTERS[dbId];
+      const client = getSupabaseClient(dbId);
+      if (!client || typeof adapter.getOrgBreakdown !== 'function') continue;
+
+      try {
+        const orgs = await adapter.getOrgBreakdown(client);
+        for (const org of orgs) {
+          const key = (org.organization || '').trim();
+          if (!key || key.toLowerCase() === 'unassigned') continue;
+          if (!orgToolCount[key]) orgToolCount[key] = new Set();
+          orgToolCount[key].add(dbId);
+        }
+      } catch (err) {
+        console.warn(`getOrgBreakdown failed for ${dbId} during org-breadth check:`, err.message);
+      }
+    }
+
+    const counts = Object.values(orgToolCount).map(set => set.size);
+    const totalOrgs = counts.length;
+    const distribution = [1, 2, 3, 4, 5].map(n => {
+      const orgCount = counts.filter(c => c === n).length;
+      return { toolCount: n, orgCount, percentage: totalOrgs > 0 ? Math.round((orgCount / totalOrgs) * 100) : 0 };
+    });
+
+    const lowUsageOrgCount = counts.filter(c => c <= 2).length;
+    const lowUsagePercentage = totalOrgs > 0 ? Math.round((lowUsageOrgCount / totalOrgs) * 100) : 0;
+
+    res.json({ totalOrgs, distribution, lowUsagePercentage });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -949,6 +1099,9 @@ app.get('/api/health', async (req, res) => {
     const hasConfig = !!(cfg && cfg.url && cfg.key);
     const errorRate = stat.calls > 0 ? Math.round((stat.errors / stat.calls) * 100) : 0;
     const avgLatencyMs = stat.calls > 0 ? Math.round(stat.totalLatencyMs / stat.calls) : null;
+    // A P95 from fewer than 5 samples is just the max — not a meaningful
+    // percentile, so hide it rather than show a misleadingly precise number.
+    const p95LatencyMs = stat.latencies.length >= 5 ? percentile(stat.latencies, 95) : null;
 
     let status = 'unknown';
     if (!hasConfig) status = 'mock';
@@ -965,6 +1118,7 @@ app.get('/api/health', async (req, res) => {
       errors: stat.errors,
       errorRate,
       avgLatencyMs,
+      p95LatencyMs,
       lastError: stat.lastError,
       lastErrorAt: stat.lastErrorAt,
       lastSuccessAt: stat.lastSuccessAt,
@@ -1126,21 +1280,39 @@ async function buildAlerts() {
         if (errorRate > 20) {
           alerts.push({ tool: name, dbId, severity: 'critical', category: 'errors', message: `Elevated query error rate (${errorRate}%)` });
         }
+        if (health.calls >= 5) {
+          const p95 = percentile(health.latencies, 95);
+          if (p95 !== null && p95 > 3000) {
+            alerts.push({ tool: name, dbId, severity: 'warning', category: 'latency', message: `P95 query latency elevated — ${p95}ms (last ${health.latencies.length} calls)` });
+          }
+        }
       }
 
+      let paymentRateForTier = null;
       if (typeof adapter.getPaymentSummary === 'function') {
         try {
           const client = getSupabaseClient(dbId);
           if (client) {
             const payment = await adapter.getPaymentSummary(client);
             const paymentTotal = payment.paidCount + payment.unpaidCount;
-            if (paymentTotal >= 5 && payment.paymentRate < 20) {
-              alerts.push({ tool: name, dbId, severity: 'warning', category: 'payments', message: `Low payment conversion — only ${payment.paymentRate}% of submissions convert (${payment.paidCount}/${paymentTotal})` });
+            if (paymentTotal >= MIN_PAYMENT_SAMPLE) {
+              paymentRateForTier = payment.paymentRate;
+              if (payment.paymentRate < 20) {
+                alerts.push({ tool: name, dbId, severity: 'warning', category: 'payments', message: `Low payment conversion — only ${payment.paymentRate}% of submissions convert (${payment.paidCount}/${paymentTotal})` });
+              }
             }
           }
         } catch (err) {
           console.warn(`Payment summary failed for ${dbId} during alerts check:`, err.message);
         }
+      }
+
+      // Only flag the Review tier when it reflects a real, low performance
+      // score — not the "not enough data yet" case every new/low-volume
+      // tool starts in, which isn't something to escalate weekly.
+      const tierResult = computeToolTier({ stats, trend, paymentRate: paymentRateForTier });
+      if (tierResult.performanceScore !== null && tierResult.tier === 'review') {
+        alerts.push({ tool: name, dbId, severity: 'warning', category: 'performance', message: `Tool tier: Review — ${tierResult.reason}` });
       }
     }
 
@@ -1188,6 +1360,8 @@ const WEEKLY_REVIEW_ROWS = [
   { category: 'errors', label: 'System Errors', description: 'Supabase query error rate across all 5 tools.' },
   { category: 'payments', label: 'Payment Conversion', description: 'Paid vs. unpaid submission rate for tools that track payment.' },
   { category: 'reports', label: 'Report Generation', description: 'PDF report failure rate and generation time.' },
+  { category: 'performance', label: 'Tool Performance Tier', description: 'Tools that dropped into the Review tier on real usage/score/payment data (not just low sample size).' },
+  { category: 'latency', label: 'Query Latency (P95)', description: 'Worst-case Supabase query latency, not just the average.' },
   { category: 'availability', label: 'Site Availability', description: 'Whether each tool\'s public site is reachable.' },
   { category: 'dataSource', label: 'Live Data Connections', description: 'Tools still running on mock data instead of a connected Supabase project.' }
 ];
