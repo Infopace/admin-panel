@@ -21,8 +21,9 @@ const db2 = require('./adapters/db2');
 const db3 = require('./adapters/db3');
 const db4 = require('./adapters/db4');
 const db5 = require('./adapters/db5');
+const db6 = require('./adapters/db6');
 
-const ADAPTERS = { db1, db2, db3, db4, db5 };
+const ADAPTERS = { db1, db2, db3, db4, db5, db6 };
 
 // Database configurations (can be overwritten via config API or .env)
 let dbConfig = {
@@ -30,7 +31,8 @@ let dbConfig = {
   db2: { url: process.env.SUPABASE_URL_2 || '', key: process.env.SUPABASE_KEY_2 || '' },
   db3: { url: process.env.SUPABASE_URL_3 || '', key: process.env.SUPABASE_KEY_3 || '' },
   db4: { url: process.env.SUPABASE_URL_4 || '', key: process.env.SUPABASE_KEY_4 || '' },
-  db5: { url: process.env.SUPABASE_URL_5 || '', key: process.env.SUPABASE_KEY_5 || '' }
+  db5: { url: process.env.SUPABASE_URL_5 || '', key: process.env.SUPABASE_KEY_5 || '' },
+  db6: { url: process.env.SUPABASE_URL_6 || '', key: process.env.SUPABASE_KEY_6 || '' }
 };
 
 // Cached Supabase clients
@@ -123,10 +125,8 @@ function logReportEvent(entry) {
 // unhealthy right now," which is what the health panel needs.
 // -------------------------------------------------------------
 const healthStats = {};
-// Rolling sample of the most recent call latencies, capped so memory
-// stays bounded — enough to compute a real P95, not just a running average.
 const MAX_LATENCY_SAMPLES = 200;
-for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
+for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5', 'db6']) {
   healthStats[dbId] = { calls: 0, errors: 0, totalLatencyMs: 0, latencies: [], lastError: null, lastErrorAt: null, lastSuccessAt: null };
 }
 
@@ -145,6 +145,7 @@ function recordHealth(dbId, { ok, latencyMs, error }) {
     stat.lastErrorAt = new Date().toISOString();
   }
 }
+
 
 // Nearest-rank percentile over a sample array (not interpolated — simple
 // and good enough for a health dashboard, not a stats package).
@@ -230,7 +231,7 @@ app.use(authenticateToken);
 // Get dashboard configuration and connection status
 app.get('/api/status', (req, res) => {
   const status = {};
-  for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
+  for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5', 'db6']) {
     const cfg = dbConfig[dbId];
     const hasConfig = !!(cfg && cfg.url && cfg.key);
     const client = getSupabaseClient(dbId);
@@ -262,7 +263,8 @@ app.post('/api/config/reset', (req, res) => {
     db2: { url: process.env.SUPABASE_URL_2 || '', key: process.env.SUPABASE_KEY_2 || '' },
     db3: { url: process.env.SUPABASE_URL_3 || '', key: process.env.SUPABASE_KEY_3 || '' },
     db4: { url: process.env.SUPABASE_URL_4 || '', key: process.env.SUPABASE_KEY_4 || '' },
-    db5: { url: process.env.SUPABASE_URL_5 || '', key: process.env.SUPABASE_KEY_5 || '' }
+    db5: { url: process.env.SUPABASE_URL_5 || '', key: process.env.SUPABASE_KEY_5 || '' },
+    db6: { url: process.env.SUPABASE_URL_6 || '', key: process.env.SUPABASE_KEY_6 || '' }
   };
   res.json({ success: true, message: 'Reset configurations to environment variables.' });
 });
@@ -455,7 +457,7 @@ async function fetchCandidatesForTool(dbId) {
 app.get('/api/overview', async (req, res) => {
   try {
     const overview = [];
-    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
+    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5', 'db6']) {
       const { adapter, candidates, isMock } = await fetchCandidatesForTool(dbId);
       const stats = computeToolStats(candidates);
       const trend = computeTrend(candidates);
@@ -491,7 +493,7 @@ app.get('/api/overview/summary', async (req, res) => {
     let mockToolsCount = 0;
     let mostRecentActivity = null;
 
-    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
+    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5', 'db6']) {
       const { candidates, isMock } = await fetchCandidatesForTool(dbId);
       const stats = computeToolStats(candidates);
 
@@ -537,7 +539,7 @@ app.get('/api/overview/entities', async (req, res) => {
     let totalOrganizations = 0;
     let totalUsers = 0;
 
-    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
+    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5', 'db6']) {
       const adapter = ADAPTERS[dbId];
       const client = getSupabaseClient(dbId);
       if (!client) continue;
@@ -575,7 +577,7 @@ app.get('/api/overview/entities', async (req, res) => {
 app.get('/api/tool-scoring', async (req, res) => {
   try {
     const tools = [];
-    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
+    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5', 'db6']) {
       const { adapter, candidates, isMock } = await fetchCandidatesForTool(dbId);
       const stats = computeToolStats(candidates);
       const trend = computeTrend(candidates);
@@ -612,7 +614,7 @@ app.get('/api/org-breadth', async (req, res) => {
   try {
     const orgToolCount = {}; // org name -> Set of dbIds it appears in
 
-    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
+    for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5', 'db6']) {
       const adapter = ADAPTERS[dbId];
       const client = getSupabaseClient(dbId);
       if (!client || typeof adapter.getOrgBreakdown !== 'function') continue;
@@ -632,7 +634,7 @@ app.get('/api/org-breadth', async (req, res) => {
 
     const counts = Object.values(orgToolCount).map(set => set.size);
     const totalOrgs = counts.length;
-    const distribution = [1, 2, 3, 4, 5].map(n => {
+    const distribution = [1, 2, 3, 4, 5, 6].map(n => {
       const orgCount = counts.filter(c => c === n).length;
       return { toolCount: n, orgCount, percentage: totalOrgs > 0 ? Math.round((orgCount / totalOrgs) * 100) : 0 };
     });
@@ -1093,7 +1095,7 @@ async function checkToolAvailability(dbId) {
 // health since the backend started, plus real Tool Availability.
 app.get('/api/health', async (req, res) => {
   const health = {};
-  for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
+  for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5', 'db6']) {
     const stat = healthStats[dbId];
     const cfg = dbConfig[dbId];
     const hasConfig = !!(cfg && cfg.url && cfg.key);
@@ -1212,7 +1214,7 @@ app.get('/api/overview/trend', async (req, res) => {
     }
 
     const dbIdFilter = req.query.dbId;
-    const dbIds = dbIdFilter && ADAPTERS[dbIdFilter] ? [dbIdFilter] : ['db1', 'db2', 'db3', 'db4', 'db5'];
+    const dbIds = dbIdFilter && ADAPTERS[dbIdFilter] ? [dbIdFilter] : ['db1', 'db2', 'db3', 'db4', 'db5', 'db6'];
 
     const buckets = {};
     dayKeys.forEach(key => { buckets[key] = { total: 0, byTool: {} }; });
@@ -1249,7 +1251,7 @@ async function buildAlerts() {
   const alerts = [];
   const reports = readReports();
 
-  for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5']) {
+  for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5', 'db6']) {
     const { adapter, candidates, isMock } = await fetchCandidatesForTool(dbId);
     const stats = computeToolStats(candidates);
     const trend = computeTrend(candidates);
@@ -1416,7 +1418,7 @@ app.get('/api/activity', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
     const dbIdFilter = req.query.dbId;
-    const dbIds = dbIdFilter && ADAPTERS[dbIdFilter] ? [dbIdFilter] : ['db1', 'db2', 'db3', 'db4', 'db5'];
+    const dbIds = dbIdFilter && ADAPTERS[dbIdFilter] ? [dbIdFilter] : ['db1', 'db2', 'db3', 'db4', 'db5', 'db6'];
     const events = [];
 
     for (const dbId of dbIds) {
