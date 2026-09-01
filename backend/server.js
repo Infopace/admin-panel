@@ -121,13 +121,43 @@ function logReportEvent(entry) {
 
 // -------------------------------------------------------------
 // Adapter health tracking (Phase 1: System / Health Monitoring)
-// In-memory counters reset on restart — good enough for "is a tool
-// unhealthy right now," which is what the health panel needs.
+// Persisted to disk (data/health-stats.json) so a backend restart/deploy
+// doesn't erase the error-rate/latency history — same read/write-a-JSON-
+// file pattern already used for data/reports.json. Still not a real time
+// series (no per-day history, just running counters + a capped sample
+// window), just no longer wiped by every restart.
 // -------------------------------------------------------------
-const healthStats = {};
+const HEALTH_STATS_FILE = path.join(__dirname, 'data', 'health-stats.json');
 const MAX_LATENCY_SAMPLES = 200;
-for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5', 'db6']) {
-  healthStats[dbId] = { calls: 0, errors: 0, totalLatencyMs: 0, latencies: [], lastError: null, lastErrorAt: null, lastSuccessAt: null };
+
+function defaultHealthStat() {
+  return { calls: 0, errors: 0, totalLatencyMs: 0, latencies: [], lastError: null, lastErrorAt: null, lastSuccessAt: null };
+}
+
+function loadHealthStats() {
+  const stats = {};
+  let persisted = {};
+  if (fs.existsSync(HEALTH_STATS_FILE)) {
+    try {
+      persisted = JSON.parse(fs.readFileSync(HEALTH_STATS_FILE, 'utf8'));
+    } catch (err) {
+      console.warn('Could not read health-stats.json, starting fresh:', err.message);
+    }
+  }
+  for (const dbId of ['db1', 'db2', 'db3', 'db4', 'db5', 'db6']) {
+    stats[dbId] = { ...defaultHealthStat(), ...persisted[dbId] };
+  }
+  return stats;
+}
+
+const healthStats = loadHealthStats();
+
+function saveHealthStats() {
+  try {
+    fs.writeFileSync(HEALTH_STATS_FILE, JSON.stringify(healthStats, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Error writing health-stats.json:', err);
+  }
 }
 
 function recordHealth(dbId, { ok, latencyMs, error }) {
@@ -144,6 +174,7 @@ function recordHealth(dbId, { ok, latencyMs, error }) {
     stat.lastError = error;
     stat.lastErrorAt = new Date().toISOString();
   }
+  saveHealthStats();
 }
 
 

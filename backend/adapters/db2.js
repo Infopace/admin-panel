@@ -208,11 +208,56 @@ function getMockCandidateDetails(candidateId) {
   };
 }
 
+/**
+ * Payment monitoring — UNVERIFIED against the live schema. This admin
+ * panel has no configured SUPABASE_URL_2/KEY_2 in this environment, so
+ * this guesses a top-level "paid" boolean on the sessions table, the
+ * same convention db4 and db6 use — it has NOT been confirmed with a
+ * schema audit the way db1/db3/db4's payment columns were. If the real
+ * column is named differently (or lives inside founder_a/founder_b's
+ * JSONB instead of on the row directly), this throws on first live call;
+ * the /payments endpoint and tool-scoring both already catch that and
+ * fall back to "no payment data" rather than crashing, so it's safe to
+ * ship, but the numbers won't be real until someone confirms the column
+ * against the actual `sessions` table.
+ */
+function isPaidValue(v) {
+  return v === true || v === 'true' || v === 1 || v === '1';
+}
+
+async function getPaymentSummary(supabase) {
+  const { data, error } = await supabase
+    .from(TABLES.SESSIONS)
+    .select('paid');
+
+  if (error) throw error;
+
+  let paidCount = 0;
+  let unpaidCount = 0;
+  data.forEach(row => {
+    isPaidValue(row.paid) ? paidCount++ : unpaidCount++;
+  });
+
+  const total = paidCount + unpaidCount;
+  return {
+    hasRevenueAmount: false,
+    paidCount,
+    unpaidCount,
+    paymentRate: total > 0 ? Math.round((paidCount / total) * 100) : 0
+  };
+}
+
+function getMockPaymentSummary() {
+  return { hasRevenueAmount: false, paidCount: 2, unpaidCount: 1, paymentRate: 67 };
+}
+
 module.exports = {
   getCandidates,
   getCandidateDetails,
   getMockCandidates,
   getMockCandidateDetails,
+  getPaymentSummary,
+  getMockPaymentSummary,
   metadata: {
     name: 'Founder and Co-founder Compatibility',
     category: 'AI Assessment',

@@ -308,6 +308,49 @@ async function getRetentionCohort(supabase) {
   return buildRetentionCohort(data, 'user_id', 'created_at');
 }
 
+/**
+ * Payment monitoring — UNVERIFIED against the live schema, same caveat
+ * as db2.js: no SUPABASE_URL_5/KEY_5 configured in this environment to
+ * confirm the real column name. Guesses a top-level "paid" boolean on
+ * the assessments table, the db4/db6 convention. Every field this
+ * adapter's other functions already read from `assessments` (score,
+ * rating, domain_scores, flags, polycrisis_triggered, high_risk_count,
+ * created_at) was confirmed via schema audit — "paid" was not, so treat
+ * this as a guess to verify, not a confirmed column. Fails safe: if the
+ * column doesn't exist, this throws on first live call and both callers
+ * (the /payments endpoint and tool-scoring) already catch that and fall
+ * back to "no payment data" instead of crashing.
+ */
+function isPaidValue(v) {
+  return v === true || v === 'true' || v === 1 || v === '1';
+}
+
+async function getPaymentSummary(supabase) {
+  const { data, error } = await supabase
+    .from(TABLES.ASSESSMENTS)
+    .select('paid');
+
+  if (error) throw error;
+
+  let paidCount = 0;
+  let unpaidCount = 0;
+  data.forEach(row => {
+    isPaidValue(row.paid) ? paidCount++ : unpaidCount++;
+  });
+
+  const total = paidCount + unpaidCount;
+  return {
+    hasRevenueAmount: false,
+    paidCount,
+    unpaidCount,
+    paymentRate: total > 0 ? Math.round((paidCount / total) * 100) : 0
+  };
+}
+
+function getMockPaymentSummary() {
+  return { hasRevenueAmount: false, paidCount: 2, unpaidCount: 1, paymentRate: 67 };
+}
+
 module.exports = {
   getCandidates,
   getCandidateDetails,
@@ -316,6 +359,8 @@ module.exports = {
   getUserBreakdown,
   getOrgBreakdown,
   getRetentionCohort,
+  getPaymentSummary,
+  getMockPaymentSummary,
   metadata: {
     name: 'Venture Risk Assessment',
     category: 'AI Assessment',
