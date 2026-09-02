@@ -845,7 +845,6 @@ function ToolPerformanceTable({ tools, sort, onSort, onSelectTool }) {
   if (tools.length === 0) return <div className="trend-chart-empty">No tools configured.</div>;
 
   const sorted = sortToolPerformance(tools, sort);
-  const tierCounts = tools.reduce((acc, t) => { acc[t.tier] = (acc[t.tier] || 0) + 1; return acc; }, {});
 
   const handleHeaderClick = (col) => {
     if (!col.sortable) return;
@@ -858,13 +857,6 @@ function ToolPerformanceTable({ tools, sort, onSort, onSelectTool }) {
 
   return (
     <div>
-      <div className="org-breadth-headline" style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-        {Object.keys(TIER_META).map(tierKey => (
-          <span key={tierKey}>
-            <strong style={{ color: TIER_META[tierKey].color }}>{tierCounts[tierKey] || 0}</strong> {TIER_META[tierKey].label}
-          </span>
-        ))}
-      </div>
       <div className="table-container">
         <table className="custom-table tool-performance-table">
           <thead>
@@ -930,6 +922,100 @@ function ToolPerformanceTable({ tools, sort, onSort, onSelectTool }) {
         week-over-week volume momentum — the same formula behind the Analytics tier board. Click a column to sort,
         click a row to open that tool's candidate list.
       </p>
+    </div>
+  );
+}
+
+// Tool Performance-only chart 1: composite score per tool, colored by the
+// same tier a tool sits in on the table below — a different question than
+// Overview's "Avg Score by Tool" (raw quality only), since the composite
+// also folds in payment conversion and volume momentum.
+function ToolCompositeScoreChart({ tools }) {
+  const scored = [...tools].filter(t => t.performanceScore !== null).sort((a, b) => b.performanceScore - a.performanceScore);
+  if (scored.length === 0) {
+    return <div className="trend-chart-empty">No tool has a computed composite score yet.</div>;
+  }
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
+        {Object.keys(TIER_META).map(tierKey => (
+          <span key={tierKey} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: TIER_META[tierKey].color, display: 'inline-block' }} />
+            {TIER_META[tierKey].label}
+          </span>
+        ))}
+      </div>
+      <ResponsiveContainer width="100%" height={Math.max(scored.length * 42, 140)}>
+        <BarChart data={scored} layout="vertical" margin={{ top: 0, right: 28, left: 0, bottom: 0 }}>
+          <XAxis type="number" domain={[0, 100]} hide />
+          <YAxis
+            type="category"
+            dataKey="name"
+            width={140}
+            tick={{ fontSize: 12, fill: 'var(--text-secondary)' }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <RTooltip
+            formatter={(value, name, props) => [`${value}/100`, (TIER_META[props.payload.tier] || TIER_META.review).label]}
+            contentStyle={{ background: 'var(--bg-surface)', border: 'none', borderRadius: 12, fontSize: 12, boxShadow: '6px 6px 14px rgba(163,177,198,0.5), -6px -6px 14px rgba(255,255,255,0.85)' }}
+          />
+          <Bar dataKey="performanceScore" radius={[0, 4, 4, 0]} barSize={18}>
+            {scored.map(t => <Cell key={t.id} fill={(TIER_META[t.tier] || TIER_META.review).color} />)}
+            <LabelList dataKey="performanceScore" position="right" style={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// Tool Performance-only chart 2: score quality next to payment conversion,
+// per tool, both on the same 0-100% axis — answers "does a high-scoring
+// tool actually convert to payment," which the table's separate columns
+// don't make visually comparable at a glance. A tool without payment data
+// simply gets no second bar, same "don't fake it" rule as its table column.
+function ToolQualityVsPaymentChart({ tools }) {
+  const data = tools.map(t => ({ id: t.id, name: t.name, avgScorePercentage: t.avgScorePercentage, paymentRate: t.hasPaymentData ? t.paymentRate : null }));
+  const anyPayment = data.some(d => d.paymentRate !== null);
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: CATEGORICAL_PALETTE[0], display: 'inline-block' }} />
+          Avg Score
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: CATEGORICAL_PALETTE[1], display: 'inline-block' }} />
+          Payment Conversion
+        </span>
+      </div>
+      <ResponsiveContainer width="100%" height={Math.max(data.length * 50, 160)}>
+        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 28, left: 0, bottom: 0 }} barGap={4}>
+          <XAxis type="number" domain={[0, 100]} hide />
+          <YAxis
+            type="category"
+            dataKey="name"
+            width={140}
+            tick={{ fontSize: 12, fill: 'var(--text-secondary)' }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <RTooltip
+            formatter={(value, name) => [`${value}%`, name === 'avgScorePercentage' ? 'Avg Score' : 'Payment Conversion']}
+            contentStyle={{ background: 'var(--bg-surface)', border: 'none', borderRadius: 12, fontSize: 12, boxShadow: '6px 6px 14px rgba(163,177,198,0.5), -6px -6px 14px rgba(255,255,255,0.85)' }}
+          />
+          <Bar dataKey="avgScorePercentage" fill={CATEGORICAL_PALETTE[0]} radius={[0, 4, 4, 0]} barSize={12}>
+            <LabelList dataKey="avgScorePercentage" position="right" formatter={(v) => `${v}%`} style={{ fontSize: 10, fill: 'var(--text-secondary)' }} />
+          </Bar>
+          <Bar dataKey="paymentRate" fill={CATEGORICAL_PALETTE[1]} radius={[0, 4, 4, 0]} barSize={12}>
+            <LabelList dataKey="paymentRate" position="right" formatter={(v) => (v === null || v === undefined ? '' : `${v}%`)} style={{ fontSize: 10, fill: 'var(--text-secondary)' }} />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+      {!anyPayment && (
+        <p className="panel-note">No tool in this set tracks payment conversion yet — bars show avg score only.</p>
+      )}
     </div>
   );
 }
@@ -2764,6 +2850,46 @@ function App() {
                 <RefreshCw size={14} /> Refresh
               </button>
             </div>
+
+            {toolPerformance && toolPerformance.length > 0 && (() => {
+              const tierCounts = toolPerformance.reduce((acc, t) => { acc[t.tier] = (acc[t.tier] || 0) + 1; return acc; }, {});
+              return (
+                <>
+                  <div className="kpi-grid" style={{ marginBottom: '1.5rem' }}>
+                    {Object.keys(TIER_META).map(tierKey => {
+                      const meta = TIER_META[tierKey];
+                      return (
+                        <KpiCard
+                          key={tierKey}
+                          icon={meta.icon}
+                          gradient={`linear-gradient(135deg, ${meta.color} 0%, ${meta.color}cc 100%)`}
+                          label={meta.label}
+                          value={tierCounts[tierKey] || 0}
+                          sub={meta.blurb}
+                        />
+                      );
+                    })}
+                  </div>
+
+                  <div className="split-grid">
+                    <div className="panel">
+                      <div className="panel-header">
+                        <h2><PanelIconBadge icon={Award} color={CHART_COLORS.primary} />Composite Score by Tool</h2>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Colored by tier</span>
+                      </div>
+                      <ToolCompositeScoreChart tools={toolPerformance} />
+                    </div>
+                    <div className="panel">
+                      <div className="panel-header">
+                        <h2><PanelIconBadge icon={CreditCard} color={CHART_COLORS.secondary} />Quality vs Payment Conversion</h2>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Same 0–100% axis</span>
+                      </div>
+                      <ToolQualityVsPaymentChart tools={toolPerformance} />
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
 
             <div className="panel">
               <ToolPerformanceTable
