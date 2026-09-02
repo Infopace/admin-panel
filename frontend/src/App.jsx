@@ -1157,7 +1157,8 @@ function App() {
     db2: { url: '', key: '' },
     db3: { url: '', key: '' },
     db4: { url: '', key: '' },
-    db5: { url: '', key: '' }
+    db5: { url: '', key: '' },
+    db6: { url: '', key: '' }
   });
 
   const [loading, setLoading] = useState(true);
@@ -1545,7 +1546,8 @@ function App() {
         db2: { url: '', key: '' },
         db3: { url: '', key: '' },
         db4: { url: '', key: '' },
-        db5: { url: '', key: '' }
+        db5: { url: '', key: '' },
+        db6: { url: '', key: '' }
       });
       setSaveMessages({});
       loadInitialData();
