@@ -1688,7 +1688,7 @@ function App() {
       {/* SIDEBAR NAVIGATION */}
       <aside className="sidebar">
         <div className="logo-container" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2.5rem' }}>
-          <img src="/favicon.png" alt="Infopace Logo" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'contain', backgroundColor: 'white', padding: '3px' }} />
+          <img src="/infopace-logo.jpg" alt="Infopace Logo" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'contain', backgroundColor: 'white', padding: '3px' }} />
           <span className="logo-text" style={{ fontSize: '1.15rem' }}>Admin Panel</span>
         </div>
 
