@@ -24,6 +24,13 @@ const db5 = require('./adapters/db5');
 const db6 = require('./adapters/db6');
 const ga4 = require('./lib/ga4');
 
+// Social module (Phase 1: YouTube + Google Business Profile) — kept in
+// its own backend/social/ + backend/routes/social.js, same "own folder,
+// wired into the same server.js" shape as everything else here, not a
+// second app.
+const socialRoutes = require('./routes/social');
+const socialScheduler = require('./social/scheduler');
+
 const ADAPTERS = { db1, db2, db3, db4, db5, db6 };
 
 // Database configurations (can be overwritten via config API or .env)
@@ -257,8 +264,18 @@ app.post('/api/auth/login', (req, res) => {
   res.json({ success: true, token, email: user.email });
 });
 
+// Social OAuth callback (unprotected) — the OAuth provider redirects the
+// user's browser here directly, so it can't carry a Bearer token; CSRF
+// protection is the signed `state` param instead (see routes/social.js).
+// Must be registered before the global authenticateToken gate below.
+app.use('/api', socialRoutes.publicRouter);
+
 // Protect all subsequent endpoints
 app.use(authenticateToken);
+
+// Social module routes (protected) — accounts, connect, posts, mentions,
+// inbox, analytics. See routes/social.js.
+app.use('/api', socialRoutes.protectedRouter);
 
 // Get dashboard configuration and connection status
 app.get('/api/status', (req, res) => {
@@ -1691,4 +1708,5 @@ app.get('/api/activity', async (req, res) => {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
+  socialScheduler.start();
 });

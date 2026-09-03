@@ -49,6 +49,10 @@ import {
   RadialBarChart,
   RadialBar
 } from 'recharts';
+import SocialNav from './social/SocialNav';
+import Composer from './social/Composer';
+import SocialCalendar from './social/Calendar';
+import ConnectAccounts from './social/ConnectAccounts';
 
 const API_BASE = 'http://localhost:5000/api';
 
@@ -1826,6 +1830,8 @@ function App() {
           </ul>
         </div>
 
+        <SocialNav currentView={currentView} setCurrentView={setCurrentView} />
+
         {/* Category accordion — collapsed by default, showing just the
             category name. Clicking a category toggles it open/closed in
             place (pure sidebar UI, no navigation); clicking a tool name
@@ -3009,6 +3015,14 @@ function App() {
             </div>
           </div>
         )}
+
+        {/* VIEW: SOCIAL — Phase 1 (Compose/Calendar/Connect Accounts for
+            YouTube + Google Business Profile). Components live under
+            src/social/ but render inside this same shell, same as every
+            other view above. */}
+        {currentView === 'social-compose' && <Composer authFetch={authFetch} />}
+        {currentView === 'social-calendar' && <SocialCalendar authFetch={authFetch} />}
+        {currentView === 'social-accounts' && <ConnectAccounts authFetch={authFetch} />}
       </main>
 
       {/* CANDIDATE DETAILS DRAWER SLIDE-OUT */}
