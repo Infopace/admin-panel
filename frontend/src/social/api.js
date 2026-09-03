@@ -12,7 +12,8 @@ export const PLATFORM_LABELS = {
   x: 'X'
 };
 
-// Phase 1 only — server.js's SOCIAL_ADAPTERS map (backend/social/adapters/index.js)
-// is the real source of truth; this list just drives which platforms the
-// Composer/ConnectAccounts UI offers until Phase 2+ adds more adapters.
-export const AVAILABLE_PLATFORMS = ['youtube', 'google_business'];
+// backend/social/adapters/index.js is the real source of truth; this
+// list just drives which platforms the Composer/ConnectAccounts UI
+// offers. Phase 1: youtube, google_business. Phase 2 adds facebook,
+// instagram. linkedin/x stay out until their external approval clears.
+export const AVAILABLE_PLATFORMS = ['youtube', 'google_business', 'facebook', 'instagram'];

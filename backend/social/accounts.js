@@ -44,12 +44,22 @@ async function getUsableAccount(accountId) {
   const needsRefresh = expiresAt !== null && expiresAt - Date.now() < REFRESH_SKEW_MS;
 
   if (needsRefresh && account.refreshToken && typeof adapter.refreshAccessToken === 'function') {
-    const refreshed = await adapter.refreshAccessToken(account.refreshToken);
+    // `account` is passed too — Google's refresh only needs the refresh
+    // token, but Meta's needs to know which Page to re-derive a token for
+    // (see facebook.js/instagram.js's refreshAccessToken for why).
+    const refreshed = await adapter.refreshAccessToken(account.refreshToken, account);
     account.accessToken = refreshed.accessToken;
-    await client
-      .from('social_accounts')
-      .update({ access_token: tokenCrypto.encrypt(refreshed.accessToken), expires_at: refreshed.expiresAt })
-      .eq('id', accountId);
+    const update = { access_token: tokenCrypto.encrypt(refreshed.accessToken), expires_at: refreshed.expiresAt };
+    // Google's refresh keeps the same refresh_token (only returns a new
+    // access_token). Meta has no refresh_token at all — instead its
+    // "refresh" re-exchanges the long-lived user token for a new one, so
+    // refreshAccessToken() there returns a new refreshToken too, which
+    // must be persisted or the next refresh uses a stale/expired one.
+    if (refreshed.refreshToken) {
+      account.refreshToken = refreshed.refreshToken;
+      update.refresh_token = tokenCrypto.encrypt(refreshed.refreshToken);
+    }
+    await client.from('social_accounts').update(update).eq('id', accountId);
   }
 
   return { account, adapter };

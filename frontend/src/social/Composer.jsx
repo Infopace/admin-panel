@@ -3,11 +3,13 @@ import { Send, AlertTriangle } from 'lucide-react';
 import { SOCIAL_API_BASE, PLATFORM_LABELS } from './api';
 
 // Per-platform limits this composer actually warns about — kept to what
-// the two Phase 1 adapters really enforce, not a guessed list for
-// platforms this app can't publish to yet.
+// the connected adapters really enforce, not a guessed list for
+// platforms this app can't publish to yet (Facebook feed posts cap at
+// 63,206 chars, high enough that it's not worth a warning here).
 const CHAR_LIMITS = {
   youtube: { field: 'title', limit: 100, note: 'YouTube has no text-only post — this becomes a video title (truncated to 100 chars) plus description; a video file is required.' },
-  google_business: { field: 'Local Post summary', limit: 1500, note: 'Google Business Profile Local Posts cap at 1500 characters.' }
+  google_business: { field: 'Local Post summary', limit: 1500, note: 'Google Business Profile Local Posts cap at 1500 characters.' },
+  instagram: { field: 'caption', limit: 2200, note: 'Instagram has no text-only post — attach an image or video URL; captions cap at 2200 characters.' }
 };
 
 function Composer({ authFetch }) {
@@ -122,7 +124,7 @@ function Composer({ authFetch }) {
         ))}
 
         <div className="form-group">
-          <label>Media URL(s) — one per line (required for YouTube; optional elsewhere)</label>
+          <label>Media URL(s) — one per line (required for YouTube and Instagram; optional elsewhere)</label>
           <textarea
             className="form-control"
             rows={2}

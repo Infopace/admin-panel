@@ -10,6 +10,9 @@ frontend/.env
 .env.local
 .env.*.local
 
+# Local Redis snapshot (backend/social/queue.js's dev dependency)
+dump.rdb
+
 # Logs
 logs
 *.log

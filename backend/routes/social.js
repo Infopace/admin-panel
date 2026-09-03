@@ -5,11 +5,10 @@
  * server.js — nothing here branches on platform name directly; it always
  * goes through ADAPTERS[platform] (social/adapters/index.js).
  *
- * Exports a factory so server.js can hand in `authenticateToken` without
- * a circular require (server.js requires this file; this file must not
- * require server.js back).
- *
- * Two routers come out of the factory:
+ * Exports two routers rather than one — server.js mounts them on either
+ * side of its own app.use(authenticateToken) line, which is what
+ * actually enforces the public/protected split below (no separate
+ * per-route auth check needed in this file):
  *   - publicRouter   — just /social/callback/:platform. OAuth providers
  *     redirect the user's browser here directly, so it can't require a
  *     Bearer header — CSRF is instead prevented by the signed `state`
@@ -25,6 +24,7 @@ const ADAPTERS = require('../social/adapters');
 const tokenCrypto = require('../social/crypto');
 const { getSocialClient } = require('../social/db');
 const { getUsableAccount } = require('../social/accounts');
+const socialQueue = require('../social/queue');
 
 const STATE_MAX_AGE_MS = 15 * 60 * 1000; // OAuth round trip has 15 min to complete
 
@@ -170,6 +170,16 @@ protectedRouter.post('/social/posts', async (req, res) => {
   }).select().single();
 
   if (error) return res.status(500).json({ error: error.message });
+
+  // Best-effort: the row is already durably saved either way, and
+  // social/scheduler.js's reconciliation sweep will pick it up within 5
+  // minutes if Redis is briefly unreachable right now.
+  try {
+    await socialQueue.enqueuePost(data);
+  } catch (err) {
+    console.error(`[social] Could not enqueue post ${data.id} immediately (will be picked up by the reconciliation sweep):`, err.message);
+  }
+
   res.status(201).json({ post: data });
 });
 
@@ -189,9 +199,11 @@ protectedRouter.delete('/social/posts/:id', async (req, res) => {
   const client = requireSocialClient(res);
   if (!client) return;
 
-  const { data: existing, error: fetchError } = await client.from('scheduled_posts').select('status').eq('id', req.params.id).single();
+  const { data: existing, error: fetchError } = await client.from('scheduled_posts').select('*').eq('id', req.params.id).single();
   if (fetchError || !existing) return res.status(404).json({ error: 'Post not found.' });
   if (existing.status !== 'pending') return res.status(400).json({ error: `Cannot cancel a post with status "${existing.status}".` });
+
+  await socialQueue.cancelPost(existing).catch(err => console.error(`[social] Could not cancel queued jobs for post ${existing.id}:`, err.message));
 
   const { error } = await client.from('scheduled_posts').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
