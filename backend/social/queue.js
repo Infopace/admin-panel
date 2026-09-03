@@ -28,25 +28,54 @@ const { getUsableAccount } = require('./accounts');
 
 const QUEUE_NAME = 'social-publish';
 const ENQUEUE_TIMEOUT_MS = 5000; // fail fast with a clear error instead of hanging the API if Redis is unreachable
+const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 
 let connection = null;
 let queue = null;
 let worker = null;
 
+// One clear line instead of ioredis's per-attempt noise (which, left
+// unbounded, is what was flooding the console) — logged once per outage,
+// not once per retry.
+let warnedUnreachable = false;
+function warnUnreachableOnce(source) {
+  if (warnedUnreachable) return;
+  warnedUnreachable = true;
+  console.warn(
+    `[social/queue] Redis not reachable at ${REDIS_URL} (via ${source}) — the publish queue is disabled until it is. ` +
+    'Install & start Redis (or point REDIS_URL at one), then restart the backend. Posts still save; ' +
+    'they just won\'t auto-publish until Redis is up.'
+  );
+}
+
 function getConnection() {
   if (!connection) {
-    connection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
+    connection = new IORedis(REDIS_URL, {
       maxRetriesPerRequest: null, // required by BullMQ for its blocking connections
       connectTimeout: 5000,
-      retryStrategy: (times) => Math.min(times * 200, 2000)
+      // Keep retrying indefinitely (capped at a 10s interval) rather than
+      // giving up — Redis coming up later (e.g. installed after the
+      // backend was already started) should self-heal without a
+      // restart. The logging above is what stops this from being noisy,
+      // not a retry limit.
+      retryStrategy: (times) => Math.min(times * 500, 10000)
     });
-    connection.on('error', (err) => console.error('[social/queue] Redis connection error:', err.message));
+    // Required: an EventEmitter's unhandled 'error' event makes Node
+    // print/throw the raw error — this is what turned one connection
+    // failure into a wall of unlabeled AggregateError dumps.
+    connection.on('error', () => warnUnreachableOnce('connection'));
+    connection.on('end', () => warnUnreachableOnce('connection'));
+    // Redis came back after being down — allow a future outage to warn again.
+    connection.on('ready', () => { warnedUnreachable = false; console.log(`[social/queue] Connected to Redis at ${REDIS_URL}.`); });
   }
   return connection;
 }
 
 function getQueue() {
-  if (!queue) queue = new Queue(QUEUE_NAME, { connection: getConnection() });
+  if (!queue) {
+    queue = new Queue(QUEUE_NAME, { connection: getConnection() });
+    queue.on('error', () => warnUnreachableOnce('queue'));
+  }
   return queue;
 }
 
@@ -129,6 +158,13 @@ function start() {
   getQueue(); // ensure the producer connection exists too
 
   worker = new Worker(QUEUE_NAME, processJob, { connection: getConnection(), concurrency: 5 });
+
+  // BullMQ duplicates the shared connection internally for its blocking
+  // commands — that duplicate is a separate EventEmitter this file never
+  // otherwise touches, so without this listener ITS connection failures
+  // are what actually produced the raw unlabeled AggregateError dumps
+  // (an EventEmitter's unhandled 'error' event makes Node print/throw).
+  worker.on('error', () => warnUnreachableOnce('worker'));
 
   worker.on('active', (job) => {
     // First job to reach here for a post flips it out of 'pending' so the
