@@ -9,7 +9,8 @@ import { SOCIAL_API_BASE, PLATFORM_LABELS } from './api';
 const CHAR_LIMITS = {
   youtube: { field: 'title', limit: 100, note: 'YouTube has no text-only post — this becomes a video title (truncated to 100 chars) plus description; a video file is required.' },
   google_business: { field: 'Local Post summary', limit: 1500, note: 'Google Business Profile Local Posts cap at 1500 characters.' },
-  instagram: { field: 'caption', limit: 2200, note: 'Instagram has no text-only post — attach an image or video URL; captions cap at 2200 characters.' }
+  instagram: { field: 'caption', limit: 2200, note: 'Instagram has no text-only post — attach an image or video URL; captions cap at 2200 characters.' },
+  linkedin: { field: 'commentary', limit: 3000, note: 'LinkedIn posts (personal profile only) cap at 3000 characters.' }
 };
 
 function Composer({ authFetch }) {
