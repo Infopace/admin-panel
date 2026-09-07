@@ -918,7 +918,7 @@ body {
   pointer-events: none;
 }
 
-.form-control {
+.auth-body .form-control {
   width: 100%;
   padding: 0.75rem 1rem;
   padding-left: 2.75rem;
@@ -931,7 +931,7 @@ body {
   transition: var(--transition-fast);
 }
 
-.form-control:focus {
+.auth-body .form-control:focus {
   outline: none;
   border-color: var(--border-focus);
   background-color: rgba(15, 23, 42, 0.8);
@@ -1519,8 +1519,7 @@ body {
 }
 
 /* Analytics tool-picker dropdown — deliberately its own class rather than
-   .form-control, which has a conflicting dark-theme definition scoped to
-   the auth screen elsewhere in this file. */
+   .form-control, to match the compact sizing/shadow style used in tables. */
 .tool-select {
   background-color: var(--bg-surface);
   border: none;
