@@ -30,6 +30,7 @@ const ga4 = require('./lib/ga4');
 // second app.
 const socialRoutes = require('./routes/social');
 const socialScheduler = require('./social/scheduler');
+const socialPollers = require('./social/pollers');
 
 const ADAPTERS = { db1, db2, db3, db4, db5, db6 };
 
@@ -1709,4 +1710,5 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
   socialScheduler.start();
+  socialPollers.start();
 });

@@ -25,6 +25,7 @@ const tokenCrypto = require('../social/crypto');
 const { getSocialClient } = require('../social/db');
 const { getUsableAccount } = require('../social/accounts');
 const socialQueue = require('../social/queue');
+const { listUsers } = require('../lib/users');
 
 const STATE_MAX_AGE_MS = 15 * 60 * 1000; // OAuth round trip has 15 min to complete
 
@@ -306,6 +307,92 @@ protectedRouter.get('/social/analytics', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// -------------------------------------------------------------
+// Unified Inbox — mentions + inbox_messages merged into one
+// queries/leads triage view (assignee, priority, status), across every
+// connected platform. social/pollers.js is what actually fills these two
+// tables now; this just reads/updates them.
+// -------------------------------------------------------------
+
+const INTERACTION_TABLES = { mention: 'mentions', message: 'inbox_messages' };
+
+/** Normalizes a mentions or inbox_messages row into one common shape the frontend renders without branching on source. */
+function normalizeInteraction(source, row) {
+  return {
+    id: row.id,
+    source, // 'mention' | 'message'
+    platform: row.platform,
+    brand: row.social_accounts ? row.social_accounts.brand : null,
+    accountLabel: row.social_accounts ? row.social_accounts.account_label : null,
+    author: source === 'mention' ? row.author : row.sender,
+    text: source === 'mention' ? row.text : row.message,
+    url: row.url || null,
+    date: source === 'mention' ? row.captured_at : row.received_at,
+    interactionStatus: row.interaction_status,
+    priority: row.priority,
+    assignedTo: row.assigned_to
+  };
+}
+
+protectedRouter.get('/social/interactions', async (req, res) => {
+  const client = requireSocialClient(res);
+  if (!client) return;
+
+  try {
+    const { platform, priority, status, assignedTo, brand, type } = req.query;
+
+    async function queryTable(table, source) {
+      if (type && type !== source) return [];
+      let query = client.from(table).select('*, social_accounts!inner(brand, account_label)');
+      if (platform) query = query.eq('platform', platform);
+      if (priority) query = query.eq('priority', priority);
+      if (status) query = query.eq('interaction_status', status);
+      if (assignedTo) query = query.eq('assigned_to', assignedTo);
+      if (brand) query = query.eq('social_accounts.brand', brand);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data || []).map(row => normalizeInteraction(source, row));
+    }
+
+    const [mentions, messages] = await Promise.all([
+      queryTable('mentions', 'mention'),
+      queryTable('inbox_messages', 'message')
+    ]);
+
+    const interactions = [...mentions, ...messages].sort((a, b) => new Date(b.date) - new Date(a.date));
+    res.json({ interactions });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+protectedRouter.patch('/social/interactions/:source/:id', async (req, res) => {
+  const client = requireSocialClient(res);
+  if (!client) return;
+
+  const table = INTERACTION_TABLES[req.params.source];
+  if (!table) return res.status(404).json({ error: `Unknown interaction source "${req.params.source}".` });
+
+  const { interactionStatus, priority, assignedTo } = req.body;
+  const update = {};
+  if (interactionStatus !== undefined) update.interaction_status = interactionStatus;
+  if (priority !== undefined) update.priority = priority;
+  if (assignedTo !== undefined) update.assigned_to = assignedTo || null;
+  if (Object.keys(update).length === 0) return res.status(400).json({ error: 'Nothing to update — pass interactionStatus, priority and/or assignedTo.' });
+
+  const { data, error } = await client.from(table).update(update).eq('id', req.params.id).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: 'Interaction not found.' });
+  res.json({ interaction: normalizeInteraction(req.params.source, data) });
+});
+
+// Assignable admin accounts for the Inbox's assignee dropdown — this
+// repo's own login/register users (data/users.json), not a separate team
+// roster.
+protectedRouter.get('/social/team', (req, res) => {
+  res.json({ users: listUsers() });
 });
 
 module.exports = { publicRouter, protectedRouter };
