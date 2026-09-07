@@ -34,7 +34,13 @@
 
 const AUTH_BASE = 'https://www.linkedin.com/oauth/v2';
 const API_BASE = 'https://api.linkedin.com/rest';
-const LINKEDIN_API_VERSION = '202405'; // LinkedIn-Version header, YYYYMM — bump periodically per LinkedIn's versioning docs
+// LinkedIn-Version header, YYYYMM. LinkedIn ships a new version monthly and
+// only keeps roughly the last 12 months active — a stale value here fails
+// every call with "Requested version ... is not active", not a config
+// problem on our end. Bump this periodically; check the current window at
+// https://learn.microsoft.com/en-us/linkedin/marketing/versioning if calls
+// start failing with that error again.
+const LINKEDIN_API_VERSION = '202608';
 
 const PLATFORM = 'linkedin';
 const SCOPES = ['openid', 'profile', 'email', 'w_member_social'];
