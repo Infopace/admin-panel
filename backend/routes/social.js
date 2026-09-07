@@ -309,6 +309,99 @@ protectedRouter.get('/social/analytics', async (req, res) => {
   }
 });
 
+// Which raw analytics_snapshots.metric name (per adapter's own
+// fetchAnalytics() — see each adapter's header) represents each concept
+// column in the Brand Health summary below. Deliberately sparse: a
+// platform with no entry for a concept (e.g. Google Business Profile has
+// no single "followers" metric — Business Profiles don't have followers)
+// reports that column as null rather than a fabricated number, same as
+// Zoho's own "NA" for metrics a platform doesn't support.
+const FOLLOWER_METRIC = { youtube: 'followers', facebook: 'fans', instagram: 'follower_count' };
+const REACH_METRIC = { facebook: 'impressions', instagram: 'reach' };
+const ENGAGEMENT_METRIC = { facebook: 'engaged_users' };
+const SUMMARY_WINDOW_DAYS = 30;
+
+async function latestMetricValue(client, accountId, metric) {
+  if (!metric) return null;
+  const { data } = await client
+    .from('analytics_snapshots')
+    .select('value')
+    .eq('social_account_id', accountId)
+    .eq('metric', metric)
+    .order('captured_date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data ? Number(data.value) : null;
+}
+
+async function metricValueOnOrBefore(client, accountId, metric, date) {
+  if (!metric) return null;
+  const { data } = await client
+    .from('analytics_snapshots')
+    .select('value')
+    .eq('social_account_id', accountId)
+    .eq('metric', metric)
+    .lte('captured_date', date)
+    .order('captured_date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data ? Number(data.value) : null;
+}
+
+// Zoho-style "Brand Health" row per connected account — total followers,
+// followers gained in the window, posts published in the window, reach,
+// engagement. social/pollers.js's sweepAnalytics() is what actually keeps
+// analytics_snapshots current; this just reads and shapes it.
+protectedRouter.get('/social/analytics/summary', async (req, res) => {
+  const client = requireSocialClient(res);
+  if (!client) return;
+
+  try {
+    const { brand } = req.query;
+    let accountsQuery = client.from('social_accounts').select('id, platform, account_label, brand').eq('status', 'active');
+    if (brand) accountsQuery = accountsQuery.eq('brand', brand);
+    const { data: accounts, error: accountsError } = await accountsQuery;
+    if (accountsError) throw accountsError;
+
+    const windowStart = new Date(Date.now() - SUMMARY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const windowStartDate = windowStart.toISOString().slice(0, 10);
+
+    const summary = await Promise.all((accounts || []).map(async (a) => {
+      const followerMetric = FOLLOWER_METRIC[a.platform];
+      const reachMetric = REACH_METRIC[a.platform];
+      const engagementMetric = ENGAGEMENT_METRIC[a.platform];
+
+      const [followers, followersBefore, reach, engagement, postsResult] = await Promise.all([
+        latestMetricValue(client, a.id, followerMetric),
+        metricValueOnOrBefore(client, a.id, followerMetric, windowStartDate),
+        latestMetricValue(client, a.id, reachMetric),
+        latestMetricValue(client, a.id, engagementMetric),
+        client.from('scheduled_posts')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'published')
+          .gte('scheduled_at', windowStart.toISOString())
+          .contains('target_account_ids', [a.id])
+      ]);
+
+      return {
+        accountId: a.id,
+        platform: a.platform,
+        accountLabel: a.account_label,
+        brand: a.brand,
+        followers,
+        newFollowers: (followers !== null && followersBefore !== null) ? followers - followersBefore : null,
+        posts: postsResult.count || 0,
+        reach,
+        engagement
+      };
+    }));
+
+    res.json({ summary, windowDays: SUMMARY_WINDOW_DAYS });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // -------------------------------------------------------------
 // Unified Inbox — mentions + inbox_messages merged into one
 // queries/leads triage view (assignee, priority, status), across every

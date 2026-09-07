@@ -54,6 +54,7 @@ import Composer from './social/Composer';
 import SocialCalendar from './social/Calendar';
 import ConnectAccounts from './social/ConnectAccounts';
 import Inbox from './social/Inbox';
+import Analytics from './social/Analytics';
 
 const API_BASE = 'http://localhost:5000/api';
 
@@ -3024,6 +3025,7 @@ function App() {
         {currentView === 'social-compose' && <Composer authFetch={authFetch} />}
         {currentView === 'social-calendar' && <SocialCalendar authFetch={authFetch} />}
         {currentView === 'social-inbox' && <Inbox authFetch={authFetch} />}
+        {currentView === 'social-analytics' && <Analytics authFetch={authFetch} />}
         {currentView === 'social-accounts' && <ConnectAccounts authFetch={authFetch} />}
       </main>
 
