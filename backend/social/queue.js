@@ -97,7 +97,7 @@ async function enqueuePost(post) {
         'publish',
         { postId: post.id, accountId, content: post.content, mediaUrls: post.media_urls || [] },
         {
-          jobId: `${post.id}:${accountId}`,
+          jobId: `${post.id}__${accountId}`, // BullMQ reserves ':' for its own Redis key namespacing and rejects a custom id containing one
           delay,
           attempts: 4,
           backoff: { type: 'exponential', delay: 10000 }, // 10s, 20s, 40s, 80s
@@ -115,7 +115,7 @@ async function enqueuePost(post) {
 async function cancelPost(post) {
   const q = getQueue();
   for (const accountId of post.target_account_ids || []) {
-    const job = await q.getJob(`${post.id}:${accountId}`).catch(() => null);
+    const job = await q.getJob(`${post.id}__${accountId}`).catch(() => null);
     if (job) await job.remove().catch(() => {});
   }
 }
