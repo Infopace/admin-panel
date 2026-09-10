@@ -29,16 +29,20 @@
 const metaOAuth = require('./_meta-oauth');
 
 const PLATFORM = 'facebook';
-// pages_manage_posts / pages_manage_metadata / pages_messaging are still
-// left out — this Meta App's dashboard is on the newer "use case"
-// onboarding flow and those 3 aren't granted Standard Access yet, which
-// made Facebook's OAuth dialog reject the whole connect with "Invalid
-// Scopes". read_insights is back in (the Brand Health summary's
-// followers/reach/engagement columns need it); add the remaining 3 back
-// here once "Manage everything on your Page" is fully customized in the
-// Meta App dashboard — until then, publish/inbox for Facebook won't work,
-// only Lead capture (fetchLeads) and Page Insights (fetchAnalytics) will.
-const SCOPES = ['pages_show_list', 'pages_read_engagement', 'leads_retrieval', 'read_insights'];
+// read_insights came back in cleanly even though it was originally grouped
+// with pages_manage_posts/pages_manage_metadata/pages_messaging as "not
+// granted Standard Access yet" on this Meta App's dashboard — so the
+// dashboard's use-case setup has likely progressed since that narrowing.
+// Trying the rest now: pages_manage_posts (Facebook publish from this
+// dashboard, currently failing with "requires ... pages_manage_posts");
+// pages_manage_ads (leadgen_forms was returning "Requires
+// pages_manage_ads permission" even with leads_retrieval granted);
+// pages_manage_metadata was left out (nothing here needs it) and
+// pages_messaging (Messenger inbox, currently failing with "Requires
+// permission: pages_messaging"). If any of these reintroduces the
+// "Invalid Scopes" OAuth-dialog rejection, drop the offending one(s)
+// back out — see this SCOPES list's git history for the exact wording.
+const SCOPES = ['pages_show_list', 'pages_read_engagement', 'leads_retrieval', 'read_insights', 'pages_manage_posts', 'pages_manage_ads', 'pages_messaging'];
 
 function isConfigured() {
   return metaOAuth.isConfigured();
