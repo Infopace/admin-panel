@@ -29,17 +29,14 @@
 const metaOAuth = require('./_meta-oauth');
 
 const PLATFORM = 'facebook';
-// pages_manage_posts is back in — the Meta App dashboard's "Manage
-// everything on your Page" use case now shows it as "Ready for testing"
-// (Standard Access granted), so Facebook publish from this dashboard
-// should work again. read_insights and pages_messaging are still left
-// out: Facebook's OAuth-dialog "Invalid Scopes" error named those two
-// specifically as not yet approved (pages_manage_posts and
-// pages_manage_ads weren't flagged, so both are kept). Add
-// read_insights/pages_messaging back once they show "Ready for testing"
-// the same way pages_manage_posts just did — until then Insights and
-// Messenger inbox stay unsupported for Facebook.
-const SCOPES = ['pages_show_list', 'pages_read_engagement', 'leads_retrieval', 'pages_manage_ads', 'pages_manage_posts'];
+// All 6 now show "Ready for testing" (Standard Access) on the Meta App
+// dashboard's "Manage everything on your Page" use case: pages_show_list,
+// pages_read_engagement, leads_retrieval, pages_manage_ads,
+// pages_manage_posts (publish), and now read_insights (Page Insights) +
+// pages_messaging (Messenger inbox) too. If reconnecting still hits
+// "Invalid Scopes", that error names the exact offending scope(s) —
+// pull just those back out rather than reverting this whole list.
+const SCOPES = ['pages_show_list', 'pages_read_engagement', 'leads_retrieval', 'pages_manage_ads', 'pages_manage_posts', 'read_insights', 'pages_messaging'];
 
 function isConfigured() {
   return metaOAuth.isConfigured();
