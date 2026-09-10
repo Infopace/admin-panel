@@ -67,6 +67,22 @@ async function graphFetch(path, params = {}) {
   return body;
 }
 
+/** Same as graphFetch but follows paging.next across every page, returning every item's data combined — for edges like /posts where a caller wants a full count/list rather than one page. */
+async function graphFetchAll(path, params = {}) {
+  let all = [];
+  let url = `${GRAPH_BASE}${path}?${new URLSearchParams(params).toString()}`;
+  while (url) {
+    const res = await fetch(url);
+    const body = await res.json();
+    if (!res.ok || body.error) {
+      throw new Error(`Meta Graph API error on ${path}: ${(body.error && body.error.message) || res.status}`);
+    }
+    all = all.concat(body.data || []);
+    url = (body.paging && body.paging.next) || null;
+  }
+  return all;
+}
+
 /** Same as graphFetch but POST, params as form body — Graph API accepts either. */
 async function graphPost(path, params = {}) {
   const res = await fetch(`${GRAPH_BASE}${path}`, {
@@ -202,5 +218,6 @@ module.exports = {
   listPages,
   explainNoPages,
   graphFetch,
+  graphFetchAll,
   graphPost
 };

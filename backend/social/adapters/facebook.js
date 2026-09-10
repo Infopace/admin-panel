@@ -29,17 +29,16 @@
 const metaOAuth = require('./_meta-oauth');
 
 const PLATFORM = 'facebook';
-// pages_manage_posts / pages_manage_metadata / pages_messaging /
-// read_insights (publishing, Messenger inbox, Page Insights) are
-// temporarily left out — this Meta App's dashboard is on the newer
-// "use case" onboarding flow and those 4 aren't granted Standard Access
-// yet, which makes Facebook's OAuth dialog reject the whole connect
-// with "Invalid Scopes" even though pages_show_list/pages_read_engagement/
-// leads_retrieval (all that Lead capture needs) already work. Add them
-// back here once "Manage everything on your Page" is fully customized
-// in the Meta App dashboard — until then, publish/inbox/analytics for
-// Facebook won't work, only Lead capture (fetchLeads) will.
-const SCOPES = ['pages_show_list', 'pages_read_engagement', 'leads_retrieval'];
+// pages_manage_posts / pages_manage_metadata / pages_messaging are still
+// left out — this Meta App's dashboard is on the newer "use case"
+// onboarding flow and those 3 aren't granted Standard Access yet, which
+// made Facebook's OAuth dialog reject the whole connect with "Invalid
+// Scopes". read_insights is back in (the Brand Health summary's
+// followers/reach/engagement columns need it); add the remaining 3 back
+// here once "Manage everything on your Page" is fully customized in the
+// Meta App dashboard — until then, publish/inbox for Facebook won't work,
+// only Lead capture (fetchLeads) and Page Insights (fetchAnalytics) will.
+const SCOPES = ['pages_show_list', 'pages_read_engagement', 'leads_retrieval', 'read_insights'];
 
 function isConfigured() {
   return metaOAuth.isConfigured();
@@ -248,6 +247,24 @@ async function fetchLeads(account) {
   return leads;
 }
 
+/**
+ * Count of the Page's own posts published since `sinceISO` — read
+ * straight from the Page's /posts edge rather than this app's own
+ * scheduled_posts table, so the Brand Health summary's "posts" column
+ * reflects everything actually posted on the Page (including posts made
+ * directly on Facebook, not just ones scheduled through this dashboard).
+ * Needs only pages_read_engagement, already granted.
+ */
+async function fetchPostCount(account, sinceISO) {
+  const sinceUnix = Math.floor(new Date(sinceISO).getTime() / 1000);
+  const posts = await metaOAuth.graphFetchAll(`/${account.externalAccountId}/posts`, {
+    since: String(sinceUnix),
+    fields: 'id',
+    access_token: account.accessToken
+  });
+  return posts.length;
+}
+
 module.exports = {
   isConfigured,
   connect,
@@ -257,6 +274,7 @@ module.exports = {
   sendReply,
   fetchAnalytics,
   fetchLeads,
+  fetchPostCount,
   refreshAccessToken,
   metadata: {
     name: 'Facebook',

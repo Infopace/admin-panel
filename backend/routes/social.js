@@ -352,6 +352,32 @@ async function metricValueOnOrBefore(client, accountId, metric, date) {
 // followers gained in the window, posts published in the window, reach,
 // engagement. social/pollers.js's sweepAnalytics() is what actually keeps
 // analytics_snapshots current; this just reads and shapes it.
+// scheduled_posts only tracks posts sent through this dashboard's own
+// Compose/Scheduler — a post made directly on the platform (e.g. straight
+// from facebook.com) never lands there. Prefer asking the platform itself
+// via the adapter's fetchPostCount (Facebook/Instagram support this
+// today); fall back to the scheduled_posts count for adapters that don't,
+// and fall back again on any live-fetch failure (expired token, missing
+// scope) so the summary still renders something rather than 500ing.
+async function postCountForAccount(client, account, windowStart) {
+  const adapter = ADAPTERS[account.platform];
+  if (adapter && typeof adapter.fetchPostCount === 'function') {
+    try {
+      const usable = await getUsableAccount(account.id);
+      if (usable) return await adapter.fetchPostCount(usable.account, windowStart.toISOString());
+    } catch (err) {
+      console.error(`[social] Live fetchPostCount failed for ${account.platform} account ${account.id}, falling back to scheduled_posts count:`, err.message);
+    }
+  }
+
+  const { count } = await client.from('scheduled_posts')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'published')
+    .gte('scheduled_at', windowStart.toISOString())
+    .contains('target_account_ids', [account.id]);
+  return count || 0;
+}
+
 protectedRouter.get('/social/analytics/summary', async (req, res) => {
   const client = requireSocialClient(res);
   if (!client) return;
@@ -371,16 +397,12 @@ protectedRouter.get('/social/analytics/summary', async (req, res) => {
       const reachMetric = REACH_METRIC[a.platform];
       const engagementMetric = ENGAGEMENT_METRIC[a.platform];
 
-      const [followers, followersBefore, reach, engagement, postsResult] = await Promise.all([
+      const [followers, followersBefore, reach, engagement, posts] = await Promise.all([
         latestMetricValue(client, a.id, followerMetric),
         metricValueOnOrBefore(client, a.id, followerMetric, windowStartDate),
         latestMetricValue(client, a.id, reachMetric),
         latestMetricValue(client, a.id, engagementMetric),
-        client.from('scheduled_posts')
-          .select('id', { count: 'exact', head: true })
-          .eq('status', 'published')
-          .gte('scheduled_at', windowStart.toISOString())
-          .contains('target_account_ids', [a.id])
+        postCountForAccount(client, a, windowStart)
       ]);
 
       return {
@@ -390,7 +412,7 @@ protectedRouter.get('/social/analytics/summary', async (req, res) => {
         brand: a.brand,
         followers,
         newFollowers: (followers !== null && followersBefore !== null) ? followers - followersBefore : null,
-        posts: postsResult.count || 0,
+        posts,
         reach,
         engagement
       };

@@ -144,6 +144,22 @@ async function fetchAnalytics(account) {
   return out;
 }
 
+/**
+ * Count of the account's own media published since `sinceISO` — same
+ * "read live from the platform, not this app's own scheduled_posts table"
+ * reasoning as facebook.js's fetchPostCount. Needs only instagram_basic,
+ * already granted.
+ */
+async function fetchPostCount(account, sinceISO) {
+  const sinceUnix = Math.floor(new Date(sinceISO).getTime() / 1000);
+  const media = await metaOAuth.graphFetchAll(`/${account.externalAccountId}/media`, {
+    since: String(sinceUnix),
+    fields: 'id',
+    access_token: account.accessToken
+  });
+  return media.length;
+}
+
 module.exports = {
   isConfigured,
   connect,
@@ -152,6 +168,7 @@ module.exports = {
   fetchInbox,
   sendReply,
   fetchAnalytics,
+  fetchPostCount,
   refreshAccessToken,
   metadata: {
     name: 'Instagram',
