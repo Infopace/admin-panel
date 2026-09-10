@@ -29,20 +29,18 @@
 const metaOAuth = require('./_meta-oauth');
 
 const PLATFORM = 'facebook';
-// read_insights came back in cleanly even though it was originally grouped
-// with pages_manage_posts/pages_manage_metadata/pages_messaging as "not
-// granted Standard Access yet" on this Meta App's dashboard — so the
-// dashboard's use-case setup has likely progressed since that narrowing.
-// Trying the rest now: pages_manage_posts (Facebook publish from this
-// dashboard, currently failing with "requires ... pages_manage_posts");
-// pages_manage_ads (leadgen_forms was returning "Requires
-// pages_manage_ads permission" even with leads_retrieval granted);
-// pages_manage_metadata was left out (nothing here needs it) and
-// pages_messaging (Messenger inbox, currently failing with "Requires
-// permission: pages_messaging"). If any of these reintroduces the
-// "Invalid Scopes" OAuth-dialog rejection, drop the offending one(s)
-// back out — see this SCOPES list's git history for the exact wording.
-const SCOPES = ['pages_show_list', 'pages_read_engagement', 'leads_retrieval', 'read_insights', 'pages_manage_posts', 'pages_manage_ads', 'pages_messaging'];
+// Confirmed via Facebook's own "Invalid Scopes" OAuth-dialog error
+// (naming the exact offending scopes): read_insights, pages_manage_posts
+// and pages_messaging are NOT granted Standard Access on this Meta App's
+// dashboard yet, so requesting any of them makes the whole connect
+// attempt bounce before the user even sees a consent screen. That error
+// did NOT flag pages_manage_ads, so it's kept — leadgen_forms (Lead
+// capture) needs it ("Requires pages_manage_ads permission"). Once
+// "Manage everything on your Page" is fully customized in the Meta App
+// dashboard, read_insights/pages_manage_posts/pages_messaging can go back
+// in (Insights, Facebook publish, and Messenger inbox all need them) —
+// until then those three stay unsupported for Facebook.
+const SCOPES = ['pages_show_list', 'pages_read_engagement', 'leads_retrieval', 'pages_manage_ads'];
 
 function isConfigured() {
   return metaOAuth.isConfigured();
