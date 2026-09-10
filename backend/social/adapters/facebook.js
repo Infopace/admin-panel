@@ -29,18 +29,17 @@
 const metaOAuth = require('./_meta-oauth');
 
 const PLATFORM = 'facebook';
-// Confirmed via Facebook's own "Invalid Scopes" OAuth-dialog error
-// (naming the exact offending scopes): read_insights, pages_manage_posts
-// and pages_messaging are NOT granted Standard Access on this Meta App's
-// dashboard yet, so requesting any of them makes the whole connect
-// attempt bounce before the user even sees a consent screen. That error
-// did NOT flag pages_manage_ads, so it's kept — leadgen_forms (Lead
-// capture) needs it ("Requires pages_manage_ads permission"). Once
-// "Manage everything on your Page" is fully customized in the Meta App
-// dashboard, read_insights/pages_manage_posts/pages_messaging can go back
-// in (Insights, Facebook publish, and Messenger inbox all need them) —
-// until then those three stay unsupported for Facebook.
-const SCOPES = ['pages_show_list', 'pages_read_engagement', 'leads_retrieval', 'pages_manage_ads'];
+// pages_manage_posts is back in — the Meta App dashboard's "Manage
+// everything on your Page" use case now shows it as "Ready for testing"
+// (Standard Access granted), so Facebook publish from this dashboard
+// should work again. read_insights and pages_messaging are still left
+// out: Facebook's OAuth-dialog "Invalid Scopes" error named those two
+// specifically as not yet approved (pages_manage_posts and
+// pages_manage_ads weren't flagged, so both are kept). Add
+// read_insights/pages_messaging back once they show "Ready for testing"
+// the same way pages_manage_posts just did — until then Insights and
+// Messenger inbox stay unsupported for Facebook.
+const SCOPES = ['pages_show_list', 'pages_read_engagement', 'leads_retrieval', 'pages_manage_ads', 'pages_manage_posts'];
 
 function isConfigured() {
   return metaOAuth.isConfigured();
