@@ -32,6 +32,12 @@ const socialRoutes = require('./routes/social');
 const socialScheduler = require('./social/scheduler');
 const socialPollers = require('./social/pollers');
 
+// Leads module — Meta Lead Ads capture, its own routes/leads.js +
+// backend/leads/poller.js, but reusing the social module's Supabase
+// project and Facebook Page connection (see backend/migrations/004_leads.sql).
+const leadsRoutes = require('./routes/leads');
+const leadsPoller = require('./leads/poller');
+
 const ADAPTERS = { db1, db2, db3, db4, db5, db6 };
 
 // Database configurations (can be overwritten via config API or .env)
@@ -277,6 +283,9 @@ app.use(authenticateToken);
 // Social module routes (protected) — accounts, connect, posts, mentions,
 // inbox, analytics. See routes/social.js.
 app.use('/api', socialRoutes.protectedRouter);
+
+// Leads routes (protected) — see routes/leads.js.
+app.use('/api', leadsRoutes);
 
 // Get dashboard configuration and connection status
 app.get('/api/status', (req, res) => {
@@ -1711,4 +1720,5 @@ app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
   socialScheduler.start();
   socialPollers.start();
+  leadsPoller.start();
 });
