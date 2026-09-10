@@ -128,6 +128,36 @@ async function listPages(userAccessToken) {
   return data.data || [];
 }
 
+/**
+ * listPages() coming back empty is almost never "this Facebook user has no
+ * Pages" — it's nearly always one of two Meta-side config issues that are
+ * invisible from the OAuth dialog itself (the picker screen happily lets
+ * you select Pages even when the resulting token won't actually carry
+ * pages_show_list):
+ *   1. The app is still in Development Mode and this Facebook user hasn't
+ *      been added as a Developer/Admin/Tester on it (Meta App dashboard ->
+ *      App Roles), so Advanced Access permissions get silently dropped
+ *      from the token even though the consent screen showed them.
+ *   2. The Page(s) picked live in a Business Portfolio the app isn't
+ *      connected to.
+ * /me/permissions on the same token tells us which of these it is, so the
+ * thrown error can say something actionable instead of a bare "no Pages".
+ */
+async function explainNoPages(userAccessToken, requestedScopes) {
+  try {
+    const perms = await graphFetch('/me/permissions', { access_token: userAccessToken });
+    const granted = (perms.data || []).filter(p => p.status === 'granted').map(p => p.permission);
+    const missing = requestedScopes.filter(s => !granted.includes(s));
+
+    if (missing.length > 0) {
+      return `Missing permission(s): ${missing.join(', ')}. This usually means the app is still in Development Mode and this Facebook account hasn't been added as a Developer/Admin/Tester (Meta App dashboard -> App Roles -> Roles), or the permission needs App Review before it works for other users.`;
+    }
+    return `All requested permissions (${granted.join(', ')}) were granted, but /me/accounts still returned no Pages — make sure this Facebook account is actually an admin of the Page(s), and that the Page(s) aren't restricted to a Business Portfolio the app isn't connected to.`;
+  } catch (err) {
+    return `Could not determine why (checking granted permissions also failed: ${err.message}).`;
+  }
+}
+
 module.exports = {
   GRAPH_BASE,
   isConfigured,
@@ -135,6 +165,7 @@ module.exports = {
   exchangeCodeForLongLivedUserToken,
   refreshLongLivedUserToken,
   listPages,
+  explainNoPages,
   graphFetch,
   graphPost
 };

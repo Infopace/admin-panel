@@ -40,7 +40,10 @@ const connect = {
     const { userAccessToken, expiresAt } = await metaOAuth.exchangeCodeForLongLivedUserToken(PLATFORM, code);
     const pages = await metaOAuth.listPages(userAccessToken);
     const page = pages[0];
-    if (!page) throw new Error('Facebook OAuth succeeded but this user manages no Pages to connect.');
+    if (!page) {
+      const detail = await metaOAuth.explainNoPages(userAccessToken, SCOPES);
+      throw new Error(`Facebook OAuth succeeded but this user manages no Pages to connect. ${detail}`);
+    }
 
     return {
       accessToken: page.access_token,      // Page token — used for all Graph calls below
