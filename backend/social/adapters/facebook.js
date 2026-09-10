@@ -29,7 +29,17 @@
 const metaOAuth = require('./_meta-oauth');
 
 const PLATFORM = 'facebook';
-const SCOPES = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts', 'pages_manage_metadata', 'pages_messaging', 'read_insights', 'leads_retrieval'];
+// pages_manage_posts / pages_manage_metadata / pages_messaging /
+// read_insights (publishing, Messenger inbox, Page Insights) are
+// temporarily left out — this Meta App's dashboard is on the newer
+// "use case" onboarding flow and those 4 aren't granted Standard Access
+// yet, which makes Facebook's OAuth dialog reject the whole connect
+// with "Invalid Scopes" even though pages_show_list/pages_read_engagement/
+// leads_retrieval (all that Lead capture needs) already work. Add them
+// back here once "Manage everything on your Page" is fully customized
+// in the Meta App dashboard — until then, publish/inbox/analytics for
+// Facebook won't work, only Lead capture (fetchLeads) will.
+const SCOPES = ['pages_show_list', 'pages_read_engagement', 'leads_retrieval'];
 
 function isConfigured() {
   return metaOAuth.isConfigured();
