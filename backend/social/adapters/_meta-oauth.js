@@ -152,9 +152,24 @@ async function explainNoPages(userAccessToken, requestedScopes) {
     if (missing.length > 0) {
       return `Missing permission(s): ${missing.join(', ')}. This usually means the app is still in Development Mode and this Facebook account hasn't been added as a Developer/Admin/Tester (Meta App dashboard -> App Roles -> Roles), or the permission needs App Review before it works for other users.`;
     }
-    return `All requested permissions (${granted.join(', ')}) were granted, but /me/accounts still returned no Pages — make sure this Facebook account is actually an admin of the Page(s), and that the Page(s) aren't restricted to a Business Portfolio the app isn't connected to.`;
+
+    // /me/permissions only says the person clicked "Allow" — it doesn't
+    // say Graph API actually attached pages_show_list to any Page.
+    // /debug_token's granular_scopes names the exact Page ids each
+    // permission is scoped to, which is the reliable signal once
+    // /me/permissions alone comes back clean.
+    const appToken = `${process.env.META_APP_ID}|${process.env.META_APP_SECRET}`;
+    const debug = await graphFetch('/debug_token', { input_token: userAccessToken, access_token: appToken });
+    const granular = (debug.data && debug.data.granular_scopes) || [];
+    const pagesScope = granular.find(g => g.scope === 'pages_show_list');
+    const pageIds = (pagesScope && pagesScope.target_ids) || [];
+
+    if (pageIds.length === 0) {
+      return `pages_show_list shows as granted (${granted.join(', ')}) but per /debug_token it's scoped to zero Pages — the Page(s) picked in the consent dialog never actually got attached to the grant. This is almost always because the app isn't added under the Page's Business Portfolio (Business Settings -> Accounts -> Pages -> Assign Partner / add this app's Business), or because the app's Advanced Access for pages_show_list hasn't been approved by App Review yet and this Facebook account isn't listed as a Developer/Admin/Tester on the app (Meta App dashboard -> App Roles -> Roles).`;
+    }
+    return `pages_show_list is scoped to Page id(s) ${pageIds.join(', ')} per /debug_token, but /me/accounts still returned none of them. That's unusual — try reconnecting; if it persists, the Page may have restricted API access under Page Settings -> Page Access / Business assets.`;
   } catch (err) {
-    return `Could not determine why (checking granted permissions also failed: ${err.message}).`;
+    return `Could not determine why (diagnostic call failed: ${err.message}).`;
   }
 }
 
