@@ -161,17 +161,39 @@ async function grantedPageIds(userAccessToken) {
  * regardless of Business Portfolio ownership.
  */
 async function listPages(userAccessToken) {
+  // A Page object with no access_token is useless — every downstream
+  // Graph call made with `undefined` serialized into the access_token
+  // param fails with the same generic "must be granted before
+  // impersonating a user's page" error regardless of which permission
+  // each call needs, since Graph can't read any scope off a token that
+  // isn't there. Worse, it looks "connected" in social_accounts while
+  // silently being unusable. Filtered out on both paths below so
+  // explainNoPages() reports the real problem instead of the account
+  // "succeeding" broken.
+  const withToken = list => (list || []).filter(page => page && page.access_token);
+
   const data = await graphFetch('/me/accounts', {
     access_token: userAccessToken,
     fields: 'id,name,access_token,instagram_business_account'
   });
-  if (data.data && data.data.length > 0) return data.data;
+  const directPages = withToken(data.data);
+  if (directPages.length > 0) return directPages;
 
+  // /me/accounts is the documented way to do this, but it only lists
+  // Pages the person manages *directly* — for a Page owned by a Business
+  // Portfolio (Business Manager), /me/accounts can come back empty even
+  // though the OAuth grant is genuinely scoped to that Page (confirmed
+  // via /debug_token's granular_scopes, which names the exact Page ids).
+  // When that happens, fetch each granted Page id directly instead —
+  // that works regardless of Business Portfolio ownership, PROVIDED the
+  // fetch actually returns an access_token (a 200 with the field missing
+  // means it doesn't, most likely because the app hasn't been assigned
+  // as a Partner/connected app on that Business Portfolio).
   const pageIds = await grantedPageIds(userAccessToken).catch(() => []);
-  const pages = await Promise.all(pageIds.map(id =>
+  const fallbackPages = await Promise.all(pageIds.map(id =>
     graphFetch(`/${id}`, { access_token: userAccessToken, fields: 'id,name,access_token,instagram_business_account' }).catch(() => null)
   ));
-  return pages.filter(Boolean);
+  return withToken(fallbackPages);
 }
 
 /**
@@ -203,7 +225,7 @@ async function explainNoPages(userAccessToken, requestedScopes) {
     if (pageIds.length === 0) {
       return `pages_show_list shows as granted (${granted.join(', ')}) but per /debug_token it's scoped to zero Pages — the Page(s) picked in the consent dialog never actually got attached to the grant. Try reconnecting; if it persists, the app may need Advanced Access approval for pages_show_list, or this Facebook account needs to be added as a Developer/Admin/Tester (Meta App dashboard -> App Roles -> Roles).`;
     }
-    return `pages_show_list is scoped to Page id(s) ${pageIds.join(', ')} per /debug_token, but fetching those Pages directly still failed — the Page(s) may have restricted API access under Page Settings -> Page Access / Business assets, or the app's Business isn't an approved partner on that Business Portfolio.`;
+    return `pages_show_list is scoped to Page id(s) ${pageIds.join(', ')} per /debug_token, but fetching those Pages directly returned no usable access_token for any of them. For a Business Portfolio-owned Page, that means the personal OAuth grant alone isn't enough — the app itself needs to be connected to that Page's Business Portfolio: in Meta Business Suite, go to Business Settings -> Accounts -> Pages -> select the Page -> assign this app (or its Business) as a Partner with the needed Page tasks (Manage Page / Create Content / Messaging / etc.), or under Business Settings -> Accounts -> Apps, add this app and grant it access to the Page there.`;
   } catch (err) {
     return `Could not determine why (diagnostic call failed: ${err.message}).`;
   }
