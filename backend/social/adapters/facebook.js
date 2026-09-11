@@ -263,6 +263,31 @@ async function fetchPostCount(account, sinceISO) {
   return posts.length;
 }
 
+/**
+ * Recent Page posts with their per-post engagement (likes/comments/shares)
+ * — what a "how did that post do" view needs that fetchPostCount (a bare
+ * count) and fetchAnalytics (Page-level daily totals) don't cover.
+ * summary(true).limit(0) on the likes/comments edges asks Graph API for
+ * just the total_count, not every individual like/comment.
+ */
+async function fetchPosts(account, limit = 10) {
+  const data = await metaOAuth.graphFetch(`/${account.externalAccountId}/posts`, {
+    fields: 'id,message,created_time,permalink_url,likes.summary(true).limit(0),comments.summary(true).limit(0),shares',
+    limit: String(limit),
+    access_token: account.accessToken
+  });
+
+  return (data.data || []).map(p => ({
+    externalPostId: p.id,
+    message: p.message || null,
+    permalinkUrl: p.permalink_url || null,
+    createdTime: p.created_time,
+    likes: (p.likes && p.likes.summary && p.likes.summary.total_count) || 0,
+    comments: (p.comments && p.comments.summary && p.comments.summary.total_count) || 0,
+    shares: (p.shares && p.shares.count) || 0
+  }));
+}
+
 module.exports = {
   isConfigured,
   connect,
@@ -273,6 +298,7 @@ module.exports = {
   fetchAnalytics,
   fetchLeads,
   fetchPostCount,
+  fetchPosts,
   refreshAccessToken,
   metadata: {
     name: 'Facebook',

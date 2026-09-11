@@ -128,6 +128,26 @@ protectedRouter.get('/social/accounts', async (req, res) => {
   res.json({ accounts: data });
 });
 
+// Per-post engagement (likes/comments/shares) for one connected account —
+// what "how did that specific post do" needs, distinct from
+// /social/analytics/summary's aggregate Page-level totals. Only
+// Facebook/Instagram implement fetchPosts today (see those adapters).
+protectedRouter.get('/social/accounts/:id/posts', async (req, res) => {
+  try {
+    const usable = await getUsableAccount(req.params.id);
+    if (!usable) return res.status(404).json({ error: 'Connected account not found.' });
+    const { account, adapter } = usable;
+    if (typeof adapter.fetchPosts !== 'function') {
+      return res.status(400).json({ error: `${account.platform} does not support per-post insights yet.` });
+    }
+    const limit = req.query.limit ? Number(req.query.limit) : 10;
+    const posts = await adapter.fetchPosts(account, limit);
+    res.json({ posts });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 protectedRouter.get('/social/connect/:platform', (req, res) => {
   const { platform } = req.params;
   const { brand } = req.query;

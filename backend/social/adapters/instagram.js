@@ -160,6 +160,30 @@ async function fetchPostCount(account, sinceISO) {
   return media.length;
 }
 
+/**
+ * Recent media with their per-post engagement — same "how did that post
+ * do" purpose as facebook.js's fetchPosts. Instagram's Graph API exposes
+ * like_count/comments_count directly on the media object, no summary
+ * edge needed. No shares figure exists for Instagram media via this API.
+ */
+async function fetchPosts(account, limit = 10) {
+  const data = await metaOAuth.graphFetch(`/${account.externalAccountId}/media`, {
+    fields: 'id,caption,timestamp,permalink,like_count,comments_count',
+    limit: String(limit),
+    access_token: account.accessToken
+  });
+
+  return (data.data || []).map(m => ({
+    externalPostId: m.id,
+    message: m.caption || null,
+    permalinkUrl: m.permalink || null,
+    createdTime: m.timestamp,
+    likes: m.like_count || 0,
+    comments: m.comments_count || 0,
+    shares: null
+  }));
+}
+
 module.exports = {
   isConfigured,
   connect,
@@ -169,6 +193,7 @@ module.exports = {
   sendReply,
   fetchAnalytics,
   fetchPostCount,
+  fetchPosts,
   refreshAccessToken,
   metadata: {
     name: 'Instagram',
