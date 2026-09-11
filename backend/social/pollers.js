@@ -28,6 +28,20 @@ const ANALYTICS_POLL_INTERVAL_MS = 6 * 60 * 60 * 1000; // followers/reach move s
 let intervalHandle = null;
 let analyticsIntervalHandle = null;
 
+/**
+ * A permission/auth error (missing scope, revoked token, dead session —
+ * see _meta-oauth.js's PERMANENT_AUTH_ERROR_CODES) can't be fixed by
+ * retrying — every future sweep would fail on the exact same call and
+ * just re-log the same error forever. Flip the account out of 'active'
+ * so the next sweep's `.eq('status', 'active')` query stops picking it
+ * up; GET /social/accounts already surfaces status, so this shows up as
+ * needing reconnect instead of silently spamming the logs every 10 min.
+ */
+async function markAccountAuthError(client, account, err) {
+  console.error(`[social/pollers] ${account.platform} account ${account.id} has a permanent auth/permission error and will not be polled again until reconnected: ${err.message}`);
+  await client.from('social_accounts').update({ status: 'expired' }).eq('id', account.id);
+}
+
 async function pollAccount(client, row) {
   const usable = await getUsableAccount(row.id);
   if (!usable) return; // account row vanished between the list query and here
@@ -50,6 +64,7 @@ async function pollAccount(client, row) {
         if (error) throw error;
       }
     } catch (err) {
+      if (err.isPermanentAuthError) return markAccountAuthError(client, account, err);
       console.error(`[social/pollers] fetchMentions failed for ${account.platform} account ${account.id}:`, err.message);
     }
   }
@@ -79,6 +94,7 @@ async function pollAccount(client, row) {
         if (error) throw error;
       }
     } catch (err) {
+      if (err.isPermanentAuthError) return markAccountAuthError(client, account, err);
       console.error(`[social/pollers] fetchInbox failed for ${account.platform} account ${account.id}:`, err.message);
     }
   }
@@ -127,6 +143,7 @@ async function pollAccountAnalytics(client, row) {
     const { error } = await client.from('analytics_snapshots').upsert(rows, { onConflict: 'social_account_id,metric,captured_date' });
     if (error) throw error;
   } catch (err) {
+    if (err.isPermanentAuthError) return markAccountAuthError(client, account, err);
     console.error(`[social/pollers] fetchAnalytics failed for ${account.platform} account ${account.id}:`, err.message);
   }
 }

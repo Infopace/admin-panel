@@ -57,13 +57,28 @@ function buildAuthUrl(platform, scopes, state) {
   return `https://www.facebook.com/${GRAPH_VERSION}/dialog/oauth?${params.toString()}`;
 }
 
+// Error `code` values Graph API returns for a token/permission problem
+// that a retry can never fix on its own — the app is missing a scope
+// (10, 200), the Page token was revoked/invalidated (190), or the
+// session itself is gone (102). Anything else (rate limits, transient
+// 500s, ...) is left for the caller to just retry next sweep.
+const PERMANENT_AUTH_ERROR_CODES = new Set([10, 102, 190, 200]);
+
+function graphError(path, body, status) {
+  const info = body && body.error;
+  const err = new Error(`Meta Graph API error on ${path}: ${(info && info.message) || status}`);
+  if (info) {
+    err.graphErrorCode = info.code;
+    err.isPermanentAuthError = PERMANENT_AUTH_ERROR_CODES.has(info.code);
+  }
+  return err;
+}
+
 async function graphFetch(path, params = {}) {
   const url = `${GRAPH_BASE}${path}?${new URLSearchParams(params).toString()}`;
   const res = await fetch(url);
   const body = await res.json();
-  if (!res.ok || body.error) {
-    throw new Error(`Meta Graph API error on ${path}: ${(body.error && body.error.message) || res.status}`);
-  }
+  if (!res.ok || body.error) throw graphError(path, body, res.status);
   return body;
 }
 
@@ -75,9 +90,7 @@ async function graphPost(path, params = {}) {
     body: new URLSearchParams(params).toString()
   });
   const body = await res.json();
-  if (!res.ok || body.error) {
-    throw new Error(`Meta Graph API error on ${path}: ${(body.error && body.error.message) || res.status}`);
-  }
+  if (!res.ok || body.error) throw graphError(path, body, res.status);
   return body;
 }
 
