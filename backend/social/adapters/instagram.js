@@ -160,28 +160,45 @@ async function fetchPostCount(account, sinceISO) {
   return media.length;
 }
 
-/**
- * Recent media with their per-post engagement — same "how did that post
- * do" purpose as facebook.js's fetchPosts. Instagram's Graph API exposes
- * like_count/comments_count directly on the media object, no summary
- * edge needed. No shares figure exists for Instagram media via this API.
- */
-async function fetchPosts(account, limit = 10) {
-  const data = await metaOAuth.graphFetch(`/${account.externalAccountId}/media`, {
-    fields: 'id,caption,timestamp,permalink,like_count,comments_count',
-    limit: String(limit),
-    access_token: account.accessToken
-  });
+const BASIC_MEDIA_FIELDS = 'id,caption,timestamp,permalink';
+const ENGAGEMENT_MEDIA_FIELDS = `${BASIC_MEDIA_FIELDS},like_count,comments_count`;
 
-  return (data.data || []).map(m => ({
+function normalizeMedia(m) {
+  return {
     externalPostId: m.id,
     message: m.caption || null,
     permalinkUrl: m.permalink || null,
     createdTime: m.timestamp,
-    likes: m.like_count || 0,
-    comments: m.comments_count || 0,
-    shares: null
-  }));
+    likes: 'like_count' in m ? (m.like_count || 0) : null,
+    comments: 'comments_count' in m ? (m.comments_count || 0) : null,
+    shares: null // no shares figure exists for Instagram media via this API
+  };
+}
+
+/**
+ * Recent media with their per-post engagement — same "how did that post
+ * do" purpose as facebook.js's fetchPosts, including the same fallback:
+ * like_count/comments_count need a permission tier plain media listing
+ * doesn't, so a permission error there retries without them rather than
+ * losing the whole post list (see facebook.js's fetchPosts for why).
+ */
+async function fetchPosts(account, limit = 10) {
+  try {
+    const data = await metaOAuth.graphFetch(`/${account.externalAccountId}/media`, {
+      fields: ENGAGEMENT_MEDIA_FIELDS,
+      limit: String(limit),
+      access_token: account.accessToken
+    });
+    return (data.data || []).map(normalizeMedia);
+  } catch (err) {
+    if (!err.isPermanentAuthError) throw err;
+    const data = await metaOAuth.graphFetch(`/${account.externalAccountId}/media`, {
+      fields: BASIC_MEDIA_FIELDS,
+      limit: String(limit),
+      access_token: account.accessToken
+    });
+    return (data.data || []).map(normalizeMedia);
+  }
 }
 
 // Same idea as facebook.js's withAuthDiagnostic — see that file's comment.

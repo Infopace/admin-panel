@@ -137,6 +137,11 @@ function Analytics({ authFetch }) {
                               <span style={{ color: 'var(--text-muted)' }}>No posts found.</span>
                             ) : (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                {postsState.posts.some(p => p.likes === null || p.comments === null) && (
+                                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                                    Engagement counts (likes/comments) aren't available for this account yet — it needs Advanced Access to Facebook's pages_read_engagement permission. Post content still shows below.
+                                  </div>
+                                )}
                                 {postsState.posts.map(post => (
                                   <div key={post.externalPostId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.6rem' }}>
                                     <div style={{ minWidth: 0 }}>
@@ -151,8 +156,8 @@ function Analytics({ authFetch }) {
                                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{formatPostDate(post.createdTime)}</div>
                                     </div>
                                     <div style={{ display: 'flex', gap: '1rem', flexShrink: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><ThumbsUp size={14} /> {post.likes}</span>
-                                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><MessageCircle size={14} /> {post.comments}</span>
+                                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><ThumbsUp size={14} /> {post.likes === null ? '—' : post.likes}</span>
+                                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><MessageCircle size={14} /> {post.comments === null ? '—' : post.comments}</span>
                                       {post.shares !== null && post.shares !== undefined && (
                                         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Share2 size={14} /> {post.shares}</span>
                                       )}
