@@ -288,17 +288,37 @@ async function fetchPosts(account, limit = 10) {
   }));
 }
 
+/**
+ * Enriches a permanent auth error (see _meta-oauth.js's graphError) with
+ * *why* the permission is missing before it reaches pollers.js/routes —
+ * "reconnect this account" vs "this needs App Review on Meta's dashboard"
+ * are different fixes, and the bare Graph error can't tell them apart.
+ */
+function withAuthDiagnostic(fn) {
+  return async function (account, ...args) {
+    try {
+      return await fn(account, ...args);
+    } catch (err) {
+      if (err.isPermanentAuthError && account.refreshToken) {
+        const detail = await metaOAuth.explainPermissionError(account.refreshToken, account.externalAccountId, err.missingScope || 'pages_read_engagement');
+        if (detail) err.message = `${err.message} — ${detail}`;
+      }
+      throw err;
+    }
+  };
+}
+
 module.exports = {
   isConfigured,
   connect,
   publish,
-  fetchMentions,
-  fetchInbox,
+  fetchMentions: withAuthDiagnostic(fetchMentions),
+  fetchInbox: withAuthDiagnostic(fetchInbox),
   sendReply,
-  fetchAnalytics,
+  fetchAnalytics: withAuthDiagnostic(fetchAnalytics),
   fetchLeads,
-  fetchPostCount,
-  fetchPosts,
+  fetchPostCount: withAuthDiagnostic(fetchPostCount),
+  fetchPosts: withAuthDiagnostic(fetchPosts),
   refreshAccessToken,
   metadata: {
     name: 'Facebook',

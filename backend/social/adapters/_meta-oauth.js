@@ -64,12 +64,21 @@ function buildAuthUrl(platform, scopes, state) {
 // 500s, ...) is left for the caller to just retry next sweep.
 const PERMANENT_AUTH_ERROR_CODES = new Set([10, 102, 190, 200]);
 
+// Graph's own permission-error message names the exact scope it wanted,
+// e.g. "This endpoint requires the 'pages_read_engagement' permission or
+// the 'Page Public Content Access' feature." — pulling it out here is what
+// lets explainPermissionError() below check that specific scope instead of
+// guessing one.
+const MISSING_SCOPE_RE = /requires the '([a-z_]+)' permission/i;
+
 function graphError(path, body, status) {
   const info = body && body.error;
   const err = new Error(`Meta Graph API error on ${path}: ${(info && info.message) || status}`);
   if (info) {
     err.graphErrorCode = info.code;
     err.isPermanentAuthError = PERMANENT_AUTH_ERROR_CODES.has(info.code);
+    const scopeMatch = MISSING_SCOPE_RE.exec(info.message || '');
+    if (scopeMatch) err.missingScope = scopeMatch[1];
   }
   return err;
 }
@@ -153,12 +162,12 @@ async function refreshLongLivedUserToken(userAccessToken) {
  * granular_scopes — see listPages()'s header for why this is needed at
  * all. Requires an app access token (app id + secret, not a user token).
  */
-async function grantedPageIds(userAccessToken) {
+async function grantedPageIds(userAccessToken, scope = 'pages_show_list') {
   const appToken = `${process.env.META_APP_ID}|${process.env.META_APP_SECRET}`;
   const debug = await graphFetch('/debug_token', { input_token: userAccessToken, access_token: appToken });
   const granular = (debug.data && debug.data.granular_scopes) || [];
-  const pagesScope = granular.find(g => g.scope === 'pages_show_list');
-  return (pagesScope && pagesScope.target_ids) || [];
+  const found = granular.find(g => g.scope === scope);
+  return (found && found.target_ids) || [];
 }
 
 /**
@@ -244,6 +253,31 @@ async function explainNoPages(userAccessToken, requestedScopes) {
   }
 }
 
+/**
+ * Same diagnostic idea as explainNoPages(), but for an *already-connected*
+ * account whose calls started failing with a permission error (the #10
+ * "requires the '<scope>' permission" case graphError() tags as
+ * missingScope). Distinguishes the two possible causes so the surfaced
+ * error tells you which fix actually applies:
+ *   - the OAuth grant never covered this Page for that scope (same
+ *     Business-Portfolio granular_scopes gap grantedPageIds() checks at
+ *     connect time) -> reconnecting should fix it.
+ *   - the grant does cover this Page, but the call still failed -> a Meta
+ *     App Review / Advanced Access gap for that scope, which reconnecting
+ *     cannot fix; it needs resolving on developers.facebook.com.
+ */
+async function explainPermissionError(userAccessToken, pageId, scope) {
+  try {
+    const pageIds = await grantedPageIds(userAccessToken, scope);
+    if (!pageIds.includes(pageId)) {
+      return `The connected account's "${scope}" grant (per /debug_token) does not cover this Page (id ${pageId}) — reconnect via Connect Accounts and make sure this Page is selected when the OAuth consent screen asks.`;
+    }
+    return `"${scope}" is granted for this Page per /debug_token, so this is a Meta App Review / Advanced Access gap for "${scope}" (the "Page Public Content Access" feature the error names) rather than something reconnecting will fix — check this app's App Review -> Permissions and Features on developers.facebook.com.`;
+  } catch (err) {
+    return null; // diagnostic call itself failed (e.g. the stored user token is also dead) — not worth surfacing a second error on top of the first
+  }
+}
+
 module.exports = {
   GRAPH_BASE,
   isConfigured,
@@ -252,6 +286,7 @@ module.exports = {
   refreshLongLivedUserToken,
   listPages,
   explainNoPages,
+  explainPermissionError,
   graphFetch,
   graphFetchAll,
   graphPost

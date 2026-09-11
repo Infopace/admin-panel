@@ -184,16 +184,31 @@ async function fetchPosts(account, limit = 10) {
   }));
 }
 
+// Same idea as facebook.js's withAuthDiagnostic — see that file's comment.
+function withAuthDiagnostic(fn) {
+  return async function (account, ...args) {
+    try {
+      return await fn(account, ...args);
+    } catch (err) {
+      if (err.isPermanentAuthError && account.refreshToken) {
+        const detail = await metaOAuth.explainPermissionError(account.refreshToken, account.externalAccountId, err.missingScope || 'instagram_basic');
+        if (detail) err.message = `${err.message} — ${detail}`;
+      }
+      throw err;
+    }
+  };
+}
+
 module.exports = {
   isConfigured,
   connect,
   publish,
-  fetchMentions,
+  fetchMentions: withAuthDiagnostic(fetchMentions),
   fetchInbox,
   sendReply,
-  fetchAnalytics,
-  fetchPostCount,
-  fetchPosts,
+  fetchAnalytics: withAuthDiagnostic(fetchAnalytics),
+  fetchPostCount: withAuthDiagnostic(fetchPostCount),
+  fetchPosts: withAuthDiagnostic(fetchPosts),
   refreshAccessToken,
   metadata: {
     name: 'Instagram',
