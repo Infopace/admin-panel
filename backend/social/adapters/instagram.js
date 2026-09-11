@@ -45,6 +45,10 @@ const connect = {
     const pages = await metaOAuth.listPages(userAccessToken);
     const page = pages.find(p => p.instagram_business_account && p.instagram_business_account.id);
     if (!page) {
+      if (pages.length === 0) {
+        const detail = await metaOAuth.explainNoPages(userAccessToken, SCOPES);
+        throw new Error(`Facebook OAuth succeeded but this user manages no Pages to connect. ${detail}`);
+      }
       throw new Error('No connected Facebook Page has an Instagram Business/Creator account linked — link one in Meta Business Suite first.');
     }
 
@@ -140,6 +144,22 @@ async function fetchAnalytics(account) {
   return out;
 }
 
+/**
+ * Count of the account's own media published since `sinceISO` — same
+ * "read live from the platform, not this app's own scheduled_posts table"
+ * reasoning as facebook.js's fetchPostCount. Needs only instagram_basic,
+ * already granted.
+ */
+async function fetchPostCount(account, sinceISO) {
+  const sinceUnix = Math.floor(new Date(sinceISO).getTime() / 1000);
+  const media = await metaOAuth.graphFetchAll(`/${account.externalAccountId}/media`, {
+    since: String(sinceUnix),
+    fields: 'id',
+    access_token: account.accessToken
+  });
+  return media.length;
+}
+
 module.exports = {
   isConfigured,
   connect,
@@ -148,6 +168,7 @@ module.exports = {
   fetchInbox,
   sendReply,
   fetchAnalytics,
+  fetchPostCount,
   refreshAccessToken,
   metadata: {
     name: 'Instagram',

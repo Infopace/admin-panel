@@ -30,7 +30,8 @@ import {
   Globe,
   CheckCircle2,
   Star,
-  Building2
+  Building2,
+  Target
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -55,6 +56,7 @@ import SocialCalendar from './social/Calendar';
 import ConnectAccounts from './social/ConnectAccounts';
 import Inbox from './social/Inbox';
 import Analytics from './social/Analytics';
+import Leads from './leads/Leads';
 
 const API_BASE = 'http://localhost:5000/api';
 
@@ -1834,6 +1836,20 @@ function App() {
 
         <SocialNav currentView={currentView} setCurrentView={setCurrentView} />
 
+        <div className="menu-section">
+          <div className="menu-title">Sales</div>
+          <ul className="menu-list">
+            <li className="menu-item">
+              <div
+                className={`menu-link ${currentView === 'leads' ? 'active' : ''}`}
+                onClick={() => setCurrentView('leads')}
+              >
+                <Target size={18} /> Leads
+              </div>
+            </li>
+          </ul>
+        </div>
+
         {/* Category accordion — collapsed by default, showing just the
             category name. Clicking a category toggles it open/closed in
             place (pure sidebar UI, no navigation); clicking a tool name
@@ -3027,6 +3043,7 @@ function App() {
         {currentView === 'social-inbox' && <Inbox authFetch={authFetch} />}
         {currentView === 'social-analytics' && <Analytics authFetch={authFetch} />}
         {currentView === 'social-accounts' && <ConnectAccounts authFetch={authFetch} />}
+        {currentView === 'leads' && <Leads authFetch={authFetch} />}
       </main>
 
       {/* CANDIDATE DETAILS DRAWER SLIDE-OUT */}

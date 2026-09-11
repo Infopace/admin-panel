@@ -11,6 +11,15 @@
  * long-lived user token -> Page token) and the Meta App Review note on
  * pages_manage_posts.
  *
+ * Also covers Lead Ads capture (fetchLeads) — Instant Form leads are a
+ * Page-owned asset (leadgen_forms) regardless of whether the campaign
+ * actually ran on Facebook or Instagram placements, so this one method
+ * captures both; there's no separate Instagram leads edge. Requires the
+ * `leads_retrieval` permission below AND the connected Page to have
+ * accepted Meta's Lead Ads Terms of Service (Page Settings > Lead Access
+ * — a one-time per-Page acceptance Meta requires before ANY app, including
+ * ones in Development Mode, can read that Page's leads via API).
+ *
  * Setup: create a Meta App at developers.facebook.com, add the
  * "Facebook Login for Business" product, set redirect URI
  * {BACKEND_PUBLIC_URL}/api/social/callback/facebook, and set
@@ -20,7 +29,14 @@
 const metaOAuth = require('./_meta-oauth');
 
 const PLATFORM = 'facebook';
-const SCOPES = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts', 'pages_manage_metadata', 'pages_messaging', 'read_insights'];
+// All 6 now show "Ready for testing" (Standard Access) on the Meta App
+// dashboard's "Manage everything on your Page" use case: pages_show_list,
+// pages_read_engagement, leads_retrieval, pages_manage_ads,
+// pages_manage_posts (publish), and now read_insights (Page Insights) +
+// pages_messaging (Messenger inbox) too. If reconnecting still hits
+// "Invalid Scopes", that error names the exact offending scope(s) —
+// pull just those back out rather than reverting this whole list.
+const SCOPES = ['pages_show_list', 'pages_read_engagement', 'leads_retrieval', 'pages_manage_ads', 'pages_manage_posts', 'read_insights', 'pages_messaging'];
 
 function isConfigured() {
   return metaOAuth.isConfigured();
@@ -40,7 +56,10 @@ const connect = {
     const { userAccessToken, expiresAt } = await metaOAuth.exchangeCodeForLongLivedUserToken(PLATFORM, code);
     const pages = await metaOAuth.listPages(userAccessToken);
     const page = pages[0];
-    if (!page) throw new Error('Facebook OAuth succeeded but this user manages no Pages to connect.');
+    if (!page) {
+      const detail = await metaOAuth.explainNoPages(userAccessToken, SCOPES);
+      throw new Error(`Facebook OAuth succeeded but this user manages no Pages to connect. ${detail}`);
+    }
 
     return {
       accessToken: page.access_token,      // Page token — used for all Graph calls below
@@ -166,6 +185,84 @@ async function fetchAnalytics(account) {
   return out;
 }
 
+// Field names Meta's Instant Form leads commonly use for the three
+// concept columns this app surfaces directly (full_name/email/phone) —
+// forms are user-authored with arbitrary custom questions too, which
+// stay in each lead's fieldData verbatim for anything this map misses.
+const NAME_FIELDS = ['full_name', 'first_name'];
+const EMAIL_FIELDS = ['email'];
+const PHONE_FIELDS = ['phone_number', 'phone'];
+
+function pickLeadField(fieldData, names) {
+  for (const name of names) {
+    const field = fieldData.find(f => f.name === name);
+    if (field && field.values && field.values[0]) return field.values[0];
+  }
+  return null;
+}
+
+/**
+ * Every Instant Form lead across every leadgen form on this Page — see
+ * this file's header on why one Page-scoped call covers leads from both
+ * Facebook and Instagram ad placements. Not paginated: each poll (see
+ * backend/leads/poller.js) only cares about leads new since the last
+ * sweep, and dedup happens there by leadgen_id, so a form accumulating
+ * more leads than one page returns just means older leads are picked up
+ * on a later sweep rather than missed.
+ */
+async function fetchLeads(account) {
+  const forms = await metaOAuth.graphFetch(`/${account.externalAccountId}/leadgen_forms`, {
+    fields: 'id,name',
+    access_token: account.accessToken
+  });
+
+  const leads = [];
+  for (const form of forms.data || []) {
+    const data = await metaOAuth.graphFetch(`/${form.id}/leads`, {
+      fields: 'id,created_time,field_data,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name',
+      access_token: account.accessToken
+    });
+
+    for (const lead of data.data || []) {
+      const fieldData = lead.field_data || [];
+      leads.push({
+        externalId: lead.id,
+        formId: form.id,
+        formName: form.name,
+        campaignId: lead.campaign_id || null,
+        campaignName: lead.campaign_name || null,
+        adsetId: lead.adset_id || null,
+        adId: lead.ad_id || null,
+        adName: lead.ad_name || null,
+        fullName: pickLeadField(fieldData, NAME_FIELDS),
+        email: pickLeadField(fieldData, EMAIL_FIELDS),
+        phone: pickLeadField(fieldData, PHONE_FIELDS),
+        fieldData,
+        createdTime: lead.created_time
+      });
+    }
+  }
+  return leads;
+}
+
+/**
+ * Count of the Page's own posts published since `sinceISO` — read
+ * straight from the Page's /posts edge rather than this app's own
+ * scheduled_posts table, so the Brand Health summary's "posts" column
+ * reflects everything actually posted on the Page (including posts made
+ * directly on Facebook, not just ones scheduled through this dashboard).
+ * Needs only pages_read_engagement, already granted.
+ */
+async function fetchPostCount(account, sinceISO) {
+  const sinceUnix = Math.floor(new Date(sinceISO).getTime() / 1000);
+  const posts = await metaOAuth.graphFetchAll(`/${account.externalAccountId}/posts`, {
+    since: String(sinceUnix),
+    fields: 'id',
+    access_token: account.accessToken
+  });
+  return posts.length;
+}
+
 module.exports = {
   isConfigured,
   connect,
@@ -174,10 +271,12 @@ module.exports = {
   fetchInbox,
   sendReply,
   fetchAnalytics,
+  fetchLeads,
+  fetchPostCount,
   refreshAccessToken,
   metadata: {
     name: 'Facebook',
     platform: PLATFORM,
-    description: 'Page post publishing, comment monitoring/replies, Messenger inbox, and Page Insights via the Graph API.'
+    description: 'Page post publishing, comment monitoring/replies, Messenger inbox, Page Insights, and Lead Ads capture via the Graph API.'
   }
 };
