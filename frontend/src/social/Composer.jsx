@@ -28,7 +28,11 @@ function Composer({ authFetch }) {
       .then(async res => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Could not load connected accounts.');
-        setAccounts((data.accounts || []).filter(a => a.status === 'active'));
+        // whatsapp has no publish() — it's messaging-only (see
+        // backend/social/adapters/whatsapp.js) — so it's excluded here
+        // rather than offered as a broadcast-post target that would just
+        // fail when the queue tries to publish to it.
+        setAccounts((data.accounts || []).filter(a => a.status === 'active' && a.platform !== 'whatsapp'));
       })
       .catch(err => { setResult({ type: 'error', text: err.message }); setAccounts([]); });
     // eslint-disable-next-line react-hooks/exhaustive-deps

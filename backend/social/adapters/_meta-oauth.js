@@ -119,6 +119,25 @@ async function graphPost(path, params = {}) {
   return body;
 }
 
+/**
+ * Same as graphPost but with a raw JSON body + Bearer auth header instead
+ * of form encoding — the WhatsApp Cloud API's /messages endpoint needs
+ * genuinely nested JSON (e.g. `{ text: { body: "..." } }`), which classic
+ * Graph API's form-encoded-with-JSON-stringified-fields convention
+ * (used elsewhere in this file, e.g. facebook.js's Messenger sendReply)
+ * isn't documented to support for this specific endpoint.
+ */
+async function graphPostJson(path, accessToken, body) {
+  const res = await fetch(`${GRAPH_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(body)
+  });
+  const responseBody = await res.json();
+  if (!res.ok || responseBody.error) throw graphError(path, responseBody, res.status);
+  return responseBody;
+}
+
 /** Short-lived code -> short-lived user token -> long-lived user token. */
 async function exchangeCodeForLongLivedUserToken(platform, code) {
   requireConfigured();
@@ -158,11 +177,14 @@ async function refreshLongLivedUserToken(userAccessToken) {
 }
 
 /**
- * Page ids pages_show_list is actually scoped to, per /debug_token's
- * granular_scopes — see listPages()'s header for why this is needed at
- * all. Requires an app access token (app id + secret, not a user token).
+ * Asset ids (Page ids for pages_show_list, WhatsApp Business Account ids
+ * for whatsapp_business_management, ...) a given scope is actually bound
+ * to, per /debug_token's granular_scopes — see listPages()'s header for
+ * why this is needed at all instead of just trusting the scope was
+ * granted. Requires an app access token (app id + secret, not a user
+ * token).
  */
-async function grantedPageIds(userAccessToken, scope = 'pages_show_list') {
+async function grantedTargetIds(userAccessToken, scope = 'pages_show_list') {
   const appToken = `${process.env.META_APP_ID}|${process.env.META_APP_SECRET}`;
   const debug = await graphFetch('/debug_token', { input_token: userAccessToken, access_token: appToken });
   const granular = (debug.data && debug.data.granular_scopes) || [];
@@ -211,7 +233,7 @@ async function listPages(userAccessToken) {
   // fetch actually returns an access_token (a 200 with the field missing
   // means it doesn't, most likely because the app hasn't been assigned
   // as a Partner/connected app on that Business Portfolio).
-  const pageIds = await grantedPageIds(userAccessToken).catch(() => []);
+  const pageIds = await grantedTargetIds(userAccessToken).catch(() => []);
   const fallbackPages = await Promise.all(pageIds.map(id =>
     graphFetch(`/${id}`, { access_token: userAccessToken, fields: 'id,name,access_token,instagram_business_account' }).catch(() => null)
   ));
@@ -243,7 +265,7 @@ async function explainNoPages(userAccessToken, requestedScopes) {
       return `Missing permission(s): ${missing.join(', ')}. This usually means the app is still in Development Mode and this Facebook account hasn't been added as a Developer/Admin/Tester (Meta App dashboard -> App Roles -> Roles), or the permission needs App Review before it works for other users.`;
     }
 
-    const pageIds = await grantedPageIds(userAccessToken);
+    const pageIds = await grantedTargetIds(userAccessToken);
     if (pageIds.length === 0) {
       return `pages_show_list shows as granted (${granted.join(', ')}) but per /debug_token it's scoped to zero Pages — the Page(s) picked in the consent dialog never actually got attached to the grant. Try reconnecting; if it persists, the app may need Advanced Access approval for pages_show_list, or this Facebook account needs to be added as a Developer/Admin/Tester (Meta App dashboard -> App Roles -> Roles).`;
     }
@@ -260,7 +282,7 @@ async function explainNoPages(userAccessToken, requestedScopes) {
  * missingScope). Distinguishes the two possible causes so the surfaced
  * error tells you which fix actually applies:
  *   - the OAuth grant never covered this Page for that scope (same
- *     Business-Portfolio granular_scopes gap grantedPageIds() checks at
+ *     Business-Portfolio granular_scopes gap grantedTargetIds() checks at
  *     connect time) -> reconnecting should fix it.
  *   - the grant does cover this Page, but the call still failed -> a Meta
  *     App Review / Advanced Access gap for that scope, which reconnecting
@@ -268,7 +290,7 @@ async function explainNoPages(userAccessToken, requestedScopes) {
  */
 async function explainPermissionError(userAccessToken, pageId, scope) {
   try {
-    const pageIds = await grantedPageIds(userAccessToken, scope);
+    const pageIds = await grantedTargetIds(userAccessToken, scope);
     if (!pageIds.includes(pageId)) {
       return `The connected account's "${scope}" grant (per /debug_token) does not cover this Page (id ${pageId}) — reconnect via Connect Accounts and make sure this Page is selected when the OAuth consent screen asks.`;
     }
@@ -285,9 +307,11 @@ module.exports = {
   exchangeCodeForLongLivedUserToken,
   refreshLongLivedUserToken,
   listPages,
+  grantedTargetIds,
   explainNoPages,
   explainPermissionError,
   graphFetch,
   graphFetchAll,
-  graphPost
+  graphPost,
+  graphPostJson
 };

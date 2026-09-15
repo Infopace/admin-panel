@@ -13,7 +13,12 @@ dotenv.config();
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// `verify` stashes the raw request body bytes on req.rawBody, alongside
+// the normal parsed req.body — needed by routes/social.js's WhatsApp
+// webhook handler to check Meta's X-Hub-Signature-256 header, which is
+// computed over the exact raw bytes Meta sent, not a re-serialization of
+// the parsed JSON (whitespace/key-order differences would break it).
+app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } }));
 
 // Import database adapters
 const db1 = require('./adapters/db1');

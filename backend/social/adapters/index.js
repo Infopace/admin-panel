@@ -7,10 +7,12 @@
  *
  * Phase 1 registered youtube + google_business; Phase 2 added facebook +
  * instagram; Phase 3 adds linkedin (personal-profile posting only — see
- * linkedin.js's header on why Company Page posting isn't included yet).
- * x is still unregistered — a valid `platform` value in the schema, but
- * blocked on external approval per the build spec, so any route touching
- * it 404s with a clear "not available yet" rather than crashing.
+ * linkedin.js's header on why Company Page posting isn't included yet);
+ * Phase 4 adds whatsapp (messaging only — no publish/fetchPosts, see
+ * whatsapp.js's header for why). x is still unregistered — a valid
+ * `platform` value in the schema, but blocked on external approval per
+ * the build spec, so any route touching it 404s with a clear "not
+ * available yet" rather than crashing.
  */
 
 const youtube = require('./youtube');
@@ -18,11 +20,13 @@ const googleBusiness = require('./google-business');
 const facebook = require('./facebook');
 const instagram = require('./instagram');
 const linkedin = require('./linkedin');
+const whatsapp = require('./whatsapp');
 
 module.exports = {
   youtube,
   google_business: googleBusiness,
   facebook,
   instagram,
-  linkedin
+  linkedin,
+  whatsapp
 };

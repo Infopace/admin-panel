@@ -14,7 +14,7 @@ create extension if not exists pgcrypto;
 create table if not exists social_accounts (
   id uuid primary key default gen_random_uuid(),
   brand text not null,                    -- e.g. 'infopace', 'ipreneur'
-  platform text not null,                 -- 'facebook' | 'instagram' | 'linkedin' | 'x' | 'youtube' | 'google_business' | 'pinterest'
+  platform text not null,                 -- 'facebook' | 'instagram' | 'linkedin' | 'whatsapp' | 'x' | 'youtube' | 'google_business' | 'pinterest'
   account_label text,                     -- human-readable, e.g. the page/channel name
   external_account_id text,               -- platform's own ID for this account (channel ID, page ID, location ID, ...)
   access_token text not null,             -- encrypted (see backend/social/crypto.js)

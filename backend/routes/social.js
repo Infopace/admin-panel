@@ -113,6 +113,91 @@ publicRouter.get('/social/callback/:platform', async (req, res) => {
 });
 
 // -------------------------------------------------------------
+// WhatsApp inbound webhook — Meta pushes messages here in real time
+// rather than this app polling for them (see whatsapp.js's header for
+// why). Public like the OAuth callback above: Meta calls this directly,
+// no Bearer token, so the GET verification handshake + POST payload
+// signature check are what stand in for auth here.
+// -------------------------------------------------------------
+
+publicRouter.get('/social/webhook/whatsapp', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  const expected = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
+  if (mode === 'subscribe' && expected && token === expected) {
+    return res.status(200).send(challenge);
+  }
+  res.sendStatus(403);
+});
+
+// Meta signs every webhook POST body with the app secret (HMAC-SHA256
+// over the exact raw bytes sent — see server.js's express.json({verify})
+// for why req.rawBody exists) so this endpoint can confirm a payload
+// actually came from Meta and not an arbitrary POST to a guessable URL.
+function verifyMetaWebhookSignature(req) {
+  const signature = req.get('x-hub-signature-256');
+  if (!signature || !process.env.META_APP_SECRET || !req.rawBody) return false;
+  const expected = `sha256=${crypto.createHmac('sha256', process.env.META_APP_SECRET).update(req.rawBody).digest('hex')}`;
+  const sigBuf = Buffer.from(signature);
+  const expectedBuf = Buffer.from(expected);
+  return sigBuf.length === expectedBuf.length && crypto.timingSafeEqual(sigBuf, expectedBuf);
+}
+
+publicRouter.post('/social/webhook/whatsapp', async (req, res) => {
+  // Meta requires a fast 2xx regardless of processing outcome — it
+  // retries aggressively on non-2xx responses and can eventually
+  // disable the subscription entirely. Acknowledge first, process after.
+  res.sendStatus(200);
+
+  if (!verifyMetaWebhookSignature(req)) {
+    console.error('[social] WhatsApp webhook payload failed signature verification — dropped.');
+    return;
+  }
+
+  const client = getSocialClient();
+  if (!client) return;
+
+  try {
+    for (const entry of req.body.entry || []) {
+      for (const change of entry.changes || []) {
+        const value = change.value || {};
+        const phoneNumberId = value.metadata && value.metadata.phone_number_id;
+        const messages = value.messages || [];
+        if (!phoneNumberId || messages.length === 0) continue; // also covers status-update payloads (delivered/read receipts), which carry no `messages` array
+
+        const { data: account } = await client.from('social_accounts')
+          .select('id')
+          .eq('platform', 'whatsapp')
+          .eq('external_account_id', phoneNumberId)
+          .eq('status', 'active')
+          .maybeSingle();
+        if (!account) continue; // a phone number this app doesn't have connected (or has since disconnected)
+
+        const nameByWaId = {};
+        for (const c of value.contacts || []) nameByWaId[c.wa_id] = c.profile && c.profile.name;
+
+        const rows = messages.map(msg => ({
+          social_account_id: account.id,
+          platform: 'whatsapp',
+          external_thread_id: msg.from, // the customer's wa_id — every message from the same number threads together, same idea as Messenger's conversation id
+          external_message_id: msg.id,
+          sender: nameByWaId[msg.from] || msg.from,
+          message: (msg.text && msg.text.body) || `[${msg.type}]`, // non-text message types (image, audio, location, ...) get a placeholder rather than being dropped
+          direction: 'inbound',
+          received_at: new Date(Number(msg.timestamp) * 1000).toISOString()
+        }));
+
+        const { error } = await client.from('inbox_messages').upsert(rows, { onConflict: 'platform,external_message_id', ignoreDuplicates: true });
+        if (error) console.error('[social] Could not store inbound WhatsApp message(s):', error.message);
+      }
+    }
+  } catch (err) {
+    console.error('[social] WhatsApp webhook processing failed:', err.message);
+  }
+});
+
+// -------------------------------------------------------------
 // Protected router — everything else, mounted after authenticateToken
 // -------------------------------------------------------------
 const protectedRouter = express.Router();
