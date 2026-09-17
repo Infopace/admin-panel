@@ -163,6 +163,27 @@ async function ensureSubscribedToPage(pageId, accessToken) {
 async function fetchInbox(account) {
   const pageId = await resolvePageId(account);
   await ensureSubscribedToPage(pageId, account.accessToken);
+
+  // TEMP diagnostic — the /conversations call below has been coming back
+  // as `{"data":[]}` with no error, and Meta returns that exact shape for
+  // two different situations that otherwise look identical: genuinely no
+  // conversations to show yet, OR a requested scope that never actually
+  // attached to this token (routine in Development Mode when the
+  // connected Facebook account isn't a Developer/Admin/Tester on the
+  // app — the OAuth consent screen shows the scope as requested either
+  // way). Checking /debug_token's granular_scopes directly (same
+  // mechanism explainPermissionError already uses elsewhere in this file)
+  // tells them apart: if pageId is missing from either list logged below,
+  // that scope needs fixing on Meta's dashboard — reconnecting again
+  // won't help until it does.
+  if (account.refreshToken) {
+    const [messagingPages, igMessagingPages] = await Promise.all([
+      metaOAuth.grantedTargetIds(account.refreshToken, 'pages_messaging').catch(() => ['<lookup failed>']),
+      metaOAuth.grantedTargetIds(account.refreshToken, 'instagram_manage_messages').catch(() => ['<lookup failed>'])
+    ]);
+    console.log(`[instagram/fetchInbox] pageId=${pageId} pages_messaging granted for pages=[${messagingPages}] instagram_manage_messages granted for pages=[${igMessagingPages}]`);
+  }
+
   const data = await metaOAuth.graphFetch(`/${pageId}/conversations`, {
     platform: 'instagram',
     fields: 'id,snippet,updated_time,participants',
