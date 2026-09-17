@@ -144,8 +144,25 @@ async function resolvePageId(account) {
   return page.id;
 }
 
+/**
+ * Meta's Instagram Conversations API returns an empty list — not a
+ * permission error — for a Page the app was never explicitly subscribed
+ * to for messaging. The OAuth connect flow never made this call (it's a
+ * separate step from granting pages_messaging/instagram_manage_messages),
+ * so an already-connected account needs this run once against its Page
+ * before fetchInbox can see anything. Idempotent — safe to call every
+ * sweep rather than only once at connect time.
+ */
+async function ensureSubscribedToPage(pageId, accessToken) {
+  await metaOAuth.graphPost(`/${pageId}/subscribed_apps`, {
+    subscribed_fields: 'messages,messaging_postbacks,messaging_seen,message_reactions',
+    access_token: accessToken
+  });
+}
+
 async function fetchInbox(account) {
   const pageId = await resolvePageId(account);
+  await ensureSubscribedToPage(pageId, account.accessToken);
   const data = await metaOAuth.graphFetch(`/${pageId}/conversations`, {
     platform: 'instagram',
     fields: 'id,snippet,updated_time,participants',
