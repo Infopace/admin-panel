@@ -155,7 +155,7 @@ async function resolvePageId(account) {
  */
 async function ensureSubscribedToPage(pageId, accessToken) {
   await metaOAuth.graphPost(`/${pageId}/subscribed_apps`, {
-    subscribed_fields: 'messages,messaging_postbacks,messaging_seen,message_reactions',
+    subscribed_fields: 'messages,messaging_postbacks,message_reactions,message_reads',
     access_token: accessToken
   });
 }
