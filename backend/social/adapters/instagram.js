@@ -31,7 +31,13 @@ const PLATFORM = 'instagram';
 const SCOPES = [
   'pages_show_list', 'pages_read_engagement',
   'instagram_basic', 'instagram_content_publish', 'instagram_manage_comments', 'instagram_manage_insights',
-  'instagram_manage_messages'
+  // Both scopes are needed together on the same token for fetchInbox()'s
+  // platform=instagram call against /{page-id}/conversations — confirmed
+  // by that call returning an empty list (not a permission error) with
+  // only instagram_manage_messages granted; facebook.js's own working
+  // Messenger fetchInbox proves pages_messaging is what that endpoint
+  // actually checks.
+  'instagram_manage_messages', 'pages_messaging'
 ];
 
 function isConfigured() {
