@@ -146,6 +146,9 @@ async function fetchInbox(account) {
     access_token: account.accessToken
   });
 
+  // TEMP diagnostic — remove once DM capture is confirmed working.
+  console.log(`[instagram/fetchInbox] pageId=${pageId} conversations=${(data.data || []).length}`, JSON.stringify(data));
+
   return (data.data || []).map(conv => ({
     externalThreadId: conv.id,
     sender: (conv.participants && conv.participants.data && conv.participants.data.map(p => p.username || p.name).join(', ')) || null,
