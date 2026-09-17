@@ -14,6 +14,11 @@
  * connected Page must have an Instagram Business (or Creator) account
  * linked to it in Meta Business Suite — Instagram Graph API access only
  * exists for accounts of that type, never a regular personal account.
+ * Also needs the `instagram_manage_messages` permission enabled under
+ * App Review > Permissions and Features (Standard Access is enough for
+ * your own linked Page/Business Portfolio) for fetchInbox()'s DM capture
+ * to work — an account connected before that scope existed must
+ * reconnect to pick it up.
  */
 
 const metaOAuth = require('./_meta-oauth');
@@ -21,9 +26,12 @@ const metaOAuth = require('./_meta-oauth');
 const PLATFORM = 'instagram';
 // Instagram publishing/insights ride on the same Page-scoped permissions
 // as facebook.js, plus instagram_content_publish and instagram_manage_comments/insights.
+// instagram_manage_messages is what fetchInbox() below needs for DM capture —
+// an account connected before this was added must reconnect to pick it up.
 const SCOPES = [
   'pages_show_list', 'pages_read_engagement',
-  'instagram_basic', 'instagram_content_publish', 'instagram_manage_comments', 'instagram_manage_insights'
+  'instagram_basic', 'instagram_content_publish', 'instagram_manage_comments', 'instagram_manage_insights',
+  'instagram_manage_messages'
 ];
 
 function isConfigured() {
@@ -114,12 +122,36 @@ async function fetchMentions(account) {
   return comments;
 }
 
-// Instagram DMs require the separate, more heavily gated Instagram
-// Messaging API — out of Phase 2 scope. Comments (fetchMentions) are the
-// inbound channel this adapter covers for now, same limitation youtube.js
-// documents for its own lack of a DM API.
-async function fetchInbox() {
-  return [];
+// Instagram DMs ride on the same unified Page Inbox /conversations edge
+// as facebook.js's fetchInbox — just scoped with platform=instagram and
+// called against the linked Page's id, not the IG business account id
+// (account.externalAccountId here). That Page id isn't stored on the
+// social_accounts row (only the IG business account id is), so it's
+// re-derived each sweep from the long-lived user token the same way
+// refreshAccessToken() above does, instead of adding a migration for one
+// extra column.
+async function resolvePageId(account) {
+  if (!account.refreshToken) throw new Error('Cannot resolve the linked Page without a refresh token — reconnect this Instagram account.');
+  const pages = await metaOAuth.listPages(account.refreshToken);
+  const page = pages.find(p => p.instagram_business_account && p.instagram_business_account.id === account.externalAccountId);
+  if (!page) throw new Error(`Could not find the Facebook Page linked to Instagram account ${account.externalAccountId}.`);
+  return page.id;
+}
+
+async function fetchInbox(account) {
+  const pageId = await resolvePageId(account);
+  const data = await metaOAuth.graphFetch(`/${pageId}/conversations`, {
+    platform: 'instagram',
+    fields: 'id,snippet,updated_time,participants',
+    access_token: account.accessToken
+  });
+
+  return (data.data || []).map(conv => ({
+    externalThreadId: conv.id,
+    sender: (conv.participants && conv.participants.data && conv.participants.data.map(p => p.username || p.name).join(', ')) || null,
+    message: conv.snippet,
+    receivedAt: conv.updated_time
+  }));
 }
 
 /** Reply to a comment (used by the Mentions reply action). */
@@ -221,7 +253,7 @@ module.exports = {
   connect,
   publish,
   fetchMentions: withAuthDiagnostic(fetchMentions),
-  fetchInbox,
+  fetchInbox: withAuthDiagnostic(fetchInbox),
   sendReply,
   fetchAnalytics: withAuthDiagnostic(fetchAnalytics),
   fetchPostCount: withAuthDiagnostic(fetchPostCount),
@@ -230,6 +262,6 @@ module.exports = {
   metadata: {
     name: 'Instagram',
     platform: PLATFORM,
-    description: 'Media publishing, comment monitoring/replies, and account insights via the Instagram Graph API (linked Facebook Page required).'
+    description: 'Media publishing, comment monitoring/replies, DM inbox capture, and account insights via the Instagram Graph API (linked Facebook Page required).'
   }
 };
