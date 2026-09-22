@@ -69,6 +69,14 @@ const connect = {
     const phone = (phoneNumbers.data || [])[0];
     if (!phone) throw new Error(`WhatsApp Business Account ${wabaIds[0]} has no phone number registered yet — add and verify one in Meta Business Suite first.`);
 
+    // Setting the Callback URL in the App Dashboard only tells Meta where
+    // the webhook *could* be sent — a WABA still won't actually send
+    // events to this app until it's subscribed via this call. Without it,
+    // the account looks "connected" (OAuth succeeded, row inserted) but
+    // no inbound message ever reaches /social/webhook/whatsapp, so
+    // inbox_messages stays empty forever.
+    await metaOAuth.graphPost(`/${wabaIds[0]}/subscribed_apps`, { access_token: userAccessToken });
+
     return {
       // Cloud API messaging calls use the user/system token directly —
       // unlike Facebook Pages there's no separate derived "phone number

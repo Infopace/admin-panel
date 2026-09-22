@@ -172,7 +172,10 @@ publicRouter.post('/social/webhook/whatsapp', async (req, res) => {
           .eq('external_account_id', phoneNumberId)
           .eq('status', 'active')
           .maybeSingle();
-        if (!account) continue; // a phone number this app doesn't have connected (or has since disconnected)
+        if (!account) {
+          console.error(`[social] WhatsApp webhook payload for phone_number_id ${phoneNumberId} matched no active connected account — dropped.`);
+          continue; // a phone number this app doesn't have connected (or has since disconnected)
+        }
 
         const nameByWaId = {};
         for (const c of value.contacts || []) nameByWaId[c.wa_id] = c.profile && c.profile.name;
