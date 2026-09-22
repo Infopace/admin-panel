@@ -190,12 +190,19 @@ async function fetchAnalytics(account) {
 // forms are user-authored with arbitrary custom questions too, which
 // stay in each lead's fieldData verbatim for anything this map misses.
 const NAME_FIELDS = ['full_name', 'first_name'];
-const EMAIL_FIELDS = ['email'];
+const EMAIL_FIELDS = ['email', 'work_email'];
 const PHONE_FIELDS = ['phone_number', 'phone'];
 
+// Case-insensitive: whoever built a given Lead Ads form keys its custom
+// questions with whatever casing they typed (confirmed by real leads
+// coming back with FULL_NAME/PHONE/EMAIL on one form vs full_name/
+// phone_number/email on another) — matching case-sensitively silently
+// dropped a real, captured answer to null on any form using the
+// "wrong" case, showing as an empty name/email/phone in the UI even
+// though the raw answer was there in fieldData all along.
 function pickLeadField(fieldData, names) {
   for (const name of names) {
-    const field = fieldData.find(f => f.name === name);
+    const field = fieldData.find(f => f.name && f.name.toLowerCase() === name.toLowerCase());
     if (field && field.values && field.values[0]) return field.values[0];
   }
   return null;
