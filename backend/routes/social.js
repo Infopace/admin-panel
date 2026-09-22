@@ -248,6 +248,50 @@ protectedRouter.get('/social/connect/:platform', (req, res) => {
   res.json({ url: adapter.connect.getAuthUrl(state) });
 });
 
+// WhatsApp Embedded Signup (see ConnectAccounts.jsx's connectWhatsAppEmbedded()
+// and whatsapp.js's completeEmbeddedSignup() for why this exists as a
+// separate path from the generic /social/connect/:platform above): the
+// JS SDK popup flow never leaves this page, so there's no browser
+// redirect/state round trip to protect — this is just an ordinary
+// authenticated API call. META_APP_ID and the Signup Configuration ID
+// are not secrets (both are meant to be used client-side by design), so
+// serving them here is fine.
+protectedRouter.get('/social/whatsapp/embedded-signup-config', (req, res) => {
+  if (!process.env.META_APP_ID || !process.env.WHATSAPP_SIGNUP_CONFIG_ID) {
+    return res.status(400).json({ error: 'META_APP_ID / WHATSAPP_SIGNUP_CONFIG_ID are not set in backend/.env — see .env.example for how to create a Signup Configuration.' });
+  }
+  res.json({ appId: process.env.META_APP_ID, configId: process.env.WHATSAPP_SIGNUP_CONFIG_ID });
+});
+
+protectedRouter.post('/social/whatsapp/embedded-signup', async (req, res) => {
+  const client = requireSocialClient(res);
+  if (!client) return;
+
+  const { code, wabaId, phoneNumberId, brand } = req.body || {};
+  if (!code || !wabaId || !phoneNumberId || !brand) {
+    return res.status(400).json({ error: 'code, wabaId, phoneNumberId and brand are all required.' });
+  }
+
+  try {
+    const result = await ADAPTERS.whatsapp.completeEmbeddedSignup({ code, wabaId, phoneNumberId });
+    const { error: insertError } = await client.from('social_accounts').insert({
+      brand,
+      platform: 'whatsapp',
+      account_label: result.accountLabel,
+      external_account_id: result.externalAccountId,
+      access_token: tokenCrypto.encrypt(result.accessToken),
+      refresh_token: result.refreshToken ? tokenCrypto.encrypt(result.refreshToken) : null,
+      expires_at: result.expiresAt,
+      status: 'active'
+    });
+    if (insertError) throw insertError;
+    res.json({ success: true, accountLabel: result.accountLabel });
+  } catch (err) {
+    console.error('[social] WhatsApp Embedded Signup failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 protectedRouter.post('/social/accounts/:id/disconnect', async (req, res) => {
   const client = requireSocialClient(res);
   if (!client) return;

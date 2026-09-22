@@ -82,6 +82,41 @@ const connect = {
   }
 };
 
+/**
+ * Completes a WhatsApp Embedded Signup flow (see routes/social.js's
+ * /social/whatsapp/embedded-signup and ConnectAccounts.jsx's
+ * connectWhatsAppEmbedded()) — the JS-SDK popup flow that lets a business
+ * pick/share an existing WABA with this app directly, rather than the
+ * plain OAuth consent screen connect.exchangeCode() above uses.
+ *
+ * The critical difference from plain OAuth: after exchanging the code,
+ * this explicitly calls POST /{waba-id}/subscribed_apps — the step that
+ * actually grants this app permission to receive the WABA's webhook
+ * events (inbound messages). A plain OAuth-connected account can read the
+ * WABA's data (phone numbers, etc.) without this, but never receives
+ * webhook events until subscribed_apps has been called with a token that
+ * has access to it — which, in practice, only a token obtained through a
+ * flow that explicitly shared the WABA (like this one) reliably has.
+ */
+async function completeEmbeddedSignup({ code, wabaId, phoneNumberId }) {
+  const { userAccessToken, expiresAt } = await metaOAuth.exchangeEmbeddedSignupCodeForLongLivedUserToken(code);
+
+  await metaOAuth.graphPost(`/${wabaId}/subscribed_apps`, { access_token: userAccessToken });
+
+  const phone = await metaOAuth.graphFetch(`/${phoneNumberId}`, {
+    access_token: userAccessToken,
+    fields: 'display_phone_number,verified_name'
+  });
+
+  return {
+    accessToken: userAccessToken,
+    refreshToken: userAccessToken,
+    expiresAt,
+    externalAccountId: phoneNumberId,
+    accountLabel: phone.verified_name ? `${phone.verified_name} (${phone.display_phone_number})` : phone.display_phone_number
+  };
+}
+
 async function refreshAccessToken(refreshToken) {
   const { userAccessToken, expiresAt } = await metaOAuth.refreshLongLivedUserToken(refreshToken);
   return { accessToken: userAccessToken, refreshToken: userAccessToken, expiresAt };
@@ -118,6 +153,7 @@ async function fetchInbox() {
 module.exports = {
   isConfigured,
   connect,
+  completeEmbeddedSignup,
   sendReply,
   fetchInbox,
   refreshAccessToken,

@@ -161,6 +161,34 @@ async function exchangeCodeForLongLivedUserToken(platform, code) {
   };
 }
 
+/**
+ * Same idea as exchangeCodeForLongLivedUserToken(), but for a `code`
+ * obtained from the JS SDK's FB.login() (WhatsApp Embedded Signup) rather
+ * than a browser redirect — there's no redirect_uri to validate against
+ * since the browser never left the page, so Meta's code-exchange endpoint
+ * is called without one (per Meta's Embedded Signup docs).
+ */
+async function exchangeEmbeddedSignupCodeForLongLivedUserToken(code) {
+  requireConfigured();
+  const short = await graphFetch('/oauth/access_token', {
+    client_id: process.env.META_APP_ID,
+    client_secret: process.env.META_APP_SECRET,
+    code
+  });
+
+  const long = await graphFetch('/oauth/access_token', {
+    grant_type: 'fb_exchange_token',
+    client_id: process.env.META_APP_ID,
+    client_secret: process.env.META_APP_SECRET,
+    fb_exchange_token: short.access_token
+  });
+
+  return {
+    userAccessToken: long.access_token,
+    expiresAt: long.expires_in ? new Date(Date.now() + long.expires_in * 1000).toISOString() : null
+  };
+}
+
 /** Re-exchanges a still-valid long-lived user token for a fresh one. */
 async function refreshLongLivedUserToken(userAccessToken) {
   requireConfigured();
@@ -305,6 +333,7 @@ module.exports = {
   isConfigured,
   buildAuthUrl,
   exchangeCodeForLongLivedUserToken,
+  exchangeEmbeddedSignupCodeForLongLivedUserToken,
   refreshLongLivedUserToken,
   listPages,
   grantedTargetIds,
