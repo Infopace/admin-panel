@@ -2036,15 +2036,39 @@ body {
 .inbox-list {
   display: flex;
   flex-direction: column;
+  overflow-x: auto;
+}
+
+/* Grid: avatar | interaction | platform | priority | status | assignee —
+   a real column per field (not text buried inside the message block),
+   shared between the header row and every data row so they line up. */
+.inbox-grid-cols {
+  display: grid;
+  grid-template-columns: 44px minmax(220px, 1fr) 150px 112px 132px 160px;
+  gap: 0.9rem;
+  align-items: center;
+  min-width: 900px;
+}
+
+.inbox-list-header {
+  padding: 0.65rem 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-surface);
+}
+
+.inbox-list-header span {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
 }
 
 .inbox-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.9rem;
   padding: 1rem 1.5rem;
   border-bottom: 1px solid var(--border-color);
   transition: var(--transition-fast);
+  align-items: flex-start;
 }
 
 .inbox-row:last-child {
@@ -2127,24 +2151,50 @@ body {
   color: var(--text-muted);
 }
 
-.inbox-controls {
+/* Platform column — its own cell, not text buried in the message block */
+.inbox-col-platform {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
+}
+
+.inbox-platform-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
   flex-shrink: 0;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  min-width: 220px;
+}
+
+.inbox-platform-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-platform-type {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 /* Compact pill-styled <select> — used for priority/status so they read
    as colored status chips (Zoho-style) while staying real dropdowns. */
 .pill-select {
+  width: 100%;
   border: 1px solid var(--border-color);
   border-radius: 999px;
   font-size: 0.75rem;
   font-weight: 700;
-  padding: 0.3rem 0.7rem;
+  padding: 0.3rem 0.6rem;
   font-family: inherit;
   cursor: pointer;
   background-color: var(--bg-secondary);
@@ -2156,6 +2206,7 @@ body {
 }
 
 .inbox-assignee-select {
+  width: 100%;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   font-size: 0.78rem;
@@ -2163,7 +2214,6 @@ body {
   font-family: inherit;
   color: var(--text-secondary);
   background-color: var(--bg-secondary);
-  max-width: 150px;
 }
 
 /* -------------------------------------------------------------
@@ -2238,4 +2288,101 @@ body {
   justify-content: center;
   font-size: 0.7rem;
   color: var(--text-secondary);
+}
+
+/* -------------------------------------------------------------
+   Calendar — post cards with platform chips + a static status pill
+   ------------------------------------------------------------- */
+
+.calendar-date-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-bottom: 0.25rem;
+}
+
+.calendar-date-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.calendar-date-count {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.post-card {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.post-card:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.post-card:first-child {
+  padding-top: 0.25rem;
+}
+
+.post-platform-chips {
+  display: flex;
+  gap: 0.3rem;
+  margin-bottom: 0.5rem;
+}
+
+.post-platform-chip {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.post-error-box {
+  margin-top: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.post-error-row {
+  font-size: 0.78rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+}
+
+.post-error-row.failed {
+  background-color: rgba(208, 59, 59, 0.06);
+  border-color: rgba(208, 59, 59, 0.25);
+}
+
+.post-error-row .platform-name {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.post-error-row .error-text {
+  color: var(--accent-danger);
+  word-break: break-word;
 }

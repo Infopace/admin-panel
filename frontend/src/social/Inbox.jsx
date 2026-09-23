@@ -146,8 +146,16 @@ function Inbox({ authFetch }) {
           <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>Nothing here yet — connected accounts are synced every 10 minutes.</div>
         ) : (
           <div className="inbox-list">
+            <div className="inbox-list-header inbox-grid-cols">
+              <span></span>
+              <span>Interaction</span>
+              <span>Platform</span>
+              <span>Priority</span>
+              <span>Status</span>
+              <span>Assignee</span>
+            </div>
             {interactions.map(item => (
-              <div className="inbox-row" key={`${item.source}-${item.id}`}>
+              <div className="inbox-row inbox-grid-cols" key={`${item.source}-${item.id}`}>
                 <div className="inbox-avatar-wrap">
                   <div className="inbox-avatar" style={{ background: avatarColor(item.author) }}>
                     {initials(item.author)}
@@ -160,13 +168,11 @@ function Inbox({ authFetch }) {
                 <div className="inbox-body">
                   <div className="inbox-body-top">
                     <span className="inbox-author">{item.author || 'Unknown'}</span>
-                    <span className="inbox-meta">{PLATFORM_LABELS[item.platform] || item.platform}</span>
-                    {item.brand && <span className="inbox-meta">· {item.brand}</span>}
+                    {item.brand && <span className="inbox-meta">{item.brand}</span>}
                   </div>
                   <p className="inbox-text">{item.text}</p>
                   <div className="inbox-footer">
                     <span>{new Date(item.date).toLocaleDateString()} · {new Date(item.date).toLocaleTimeString()}</span>
-                    <span>{item.source === 'mention' ? 'Mention' : 'Message'}</span>
                     {item.url && (
                       <a href={item.url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-primary)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
                         <ExternalLink size={12} /> View
@@ -175,35 +181,43 @@ function Inbox({ authFetch }) {
                   </div>
                 </div>
 
-                <div className="inbox-controls">
-                  <select
-                    className="pill-select"
-                    value={item.priority}
-                    disabled={savingId === item.id}
-                    style={{ color: PRIORITY_COLOR[item.priority], background: `${PRIORITY_COLOR[item.priority]}18`, borderColor: 'transparent' }}
-                    onChange={(e) => patch(item, { priority: e.target.value })}
-                  >
-                    {PRIORITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                  <select
-                    className="pill-select"
-                    value={item.interactionStatus}
-                    disabled={savingId === item.id}
-                    style={{ color: STATUS_COLOR[item.interactionStatus], background: `${STATUS_COLOR[item.interactionStatus]}18`, borderColor: 'transparent' }}
-                    onChange={(e) => patch(item, { interactionStatus: e.target.value })}
-                  >
-                    {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                  <select
-                    className="inbox-assignee-select"
-                    value={item.assignedTo || ''}
-                    disabled={savingId === item.id}
-                    onChange={(e) => patch(item, { assignedTo: e.target.value })}
-                  >
-                    <option value="">Unassigned</option>
-                    {users.map(u => <option key={u.id} value={u.id}>{u.email}</option>)}
-                  </select>
+                <div className="inbox-col-platform">
+                  <div className="inbox-platform-icon" style={{ background: PLATFORM_COLORS[item.platform] || 'var(--text-muted)' }}>
+                    {item.source === 'mention' ? <AtSign size={13} /> : <MessageSquare size={13} />}
+                  </div>
+                  <div>
+                    <div className="inbox-platform-name">{PLATFORM_LABELS[item.platform] || item.platform}</div>
+                    <div className="inbox-platform-type">{item.source === 'mention' ? 'Mention' : 'Message'}</div>
+                  </div>
                 </div>
+
+                <select
+                  className="pill-select"
+                  value={item.priority}
+                  disabled={savingId === item.id}
+                  style={{ color: PRIORITY_COLOR[item.priority], background: `${PRIORITY_COLOR[item.priority]}18`, borderColor: 'transparent' }}
+                  onChange={(e) => patch(item, { priority: e.target.value })}
+                >
+                  {PRIORITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                <select
+                  className="pill-select"
+                  value={item.interactionStatus}
+                  disabled={savingId === item.id}
+                  style={{ color: STATUS_COLOR[item.interactionStatus], background: `${STATUS_COLOR[item.interactionStatus]}18`, borderColor: 'transparent' }}
+                  onChange={(e) => patch(item, { interactionStatus: e.target.value })}
+                >
+                  {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                <select
+                  className="inbox-assignee-select"
+                  value={item.assignedTo || ''}
+                  disabled={savingId === item.id}
+                  onChange={(e) => patch(item, { assignedTo: e.target.value })}
+                >
+                  <option value="">Unassigned</option>
+                  {users.map(u => <option key={u.id} value={u.id}>{u.email}</option>)}
+                </select>
               </div>
             ))}
           </div>
