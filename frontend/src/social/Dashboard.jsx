@@ -191,7 +191,7 @@ function Dashboard({ authFetch, setCurrentView }) {
             <div className="panel">
               <div className="panel-header">
                 <h2>Upcoming Posts</h2>
-                <span className="tag" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => setCurrentView('social-calendar')}>Open Calendar →</span>
+                <span className="tag" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => setCurrentView('social-posts')}>Open Posts →</span>
               </div>
               {posts === null ? (
                 <div className="trend-chart-empty">Loading…</div>

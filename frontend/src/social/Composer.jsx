@@ -125,7 +125,7 @@ function Composer({ authFetch }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not schedule post.');
-      setResult({ type: 'success', text: 'Post scheduled — check Calendar for its status.' });
+      setResult({ type: 'success', text: 'Post scheduled — check Posts for its status.' });
       setContent('');
       setMediaItems([]);
       setPastedUrl('');

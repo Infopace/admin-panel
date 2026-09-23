@@ -53,7 +53,7 @@ import {
 } from 'recharts';
 import SocialNav from './social/SocialNav';
 import Composer from './social/Composer';
-import SocialCalendar from './social/Calendar';
+import SocialPosts from './social/Posts';
 import ConnectAccounts from './social/ConnectAccounts';
 import Inbox from './social/Inbox';
 import Analytics from './social/Analytics';
@@ -3046,13 +3046,13 @@ function App() {
           </div>
         )}
 
-        {/* VIEW: SOCIAL — Phase 1 (Compose/Calendar/Connect Accounts for
+        {/* VIEW: SOCIAL — Phase 1 (Compose/Posts/Connect Accounts for
             YouTube + Google Business Profile). Components live under
             src/social/ but render inside this same shell, same as every
             other view above. */}
         {currentView === 'social-dashboard' && <SocialDashboard authFetch={authFetch} setCurrentView={setCurrentView} />}
         {currentView === 'social-compose' && <Composer authFetch={authFetch} />}
-        {currentView === 'social-calendar' && <SocialCalendar authFetch={authFetch} />}
+        {currentView === 'social-posts' && <SocialPosts authFetch={authFetch} setCurrentView={setCurrentView} />}
         {currentView === 'social-inbox' && <Inbox authFetch={authFetch} />}
         {currentView === 'social-analytics' && <Analytics authFetch={authFetch} />}
         {currentView === 'social-accounts' && <ConnectAccounts authFetch={authFetch} />}

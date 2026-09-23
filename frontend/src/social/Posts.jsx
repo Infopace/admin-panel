@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { RefreshCw, X, Calendar as CalendarIcon, ChevronDown, ChevronUp } from 'lucide-react';
+import { RefreshCw, X, Calendar as CalendarIcon, ChevronDown, ChevronUp, PenSquare, Search } from 'lucide-react';
 import { SOCIAL_API_BASE, PLATFORM_LABELS, PLATFORM_COLORS, AVAILABLE_PLATFORMS } from './api';
 
-// List view, not a grid calendar — this repo has no calendar/date-grid
-// library installed (just recharts, for the analytics charts elsewhere),
-// and the build spec explicitly allows "calendar/list view" for this
-// component. Grouped by scheduled date, newest first, same ordering
-// convention as every other feed in this app (mentions, activity, etc).
+// Renamed from "Calendar" — Zoho/HubSpot both call this section "Posts"
+// with Scheduled/Published as its two sub-views (Zoho's Posts nav has
+// Published Posts, Scheduled Posts, Approvals, Unpublished, Drafts;
+// this app's data model only distinguishes pending/publishing (still
+// queued) from published/failed (already attempted), so those become the
+// two sub-tabs rather than a 1:1 copy of Zoho's five). List view, not a
+// grid calendar — this repo has no calendar/date-grid library installed,
+// and the build spec explicitly allows "calendar/list view" here.
 // Post cards carry the same platform-badge/status-pill visual language as
 // Inbox (social/Inbox.jsx) rather than plain colored text.
 const STATUS_STYLE = {
@@ -15,11 +18,10 @@ const STATUS_STYLE = {
   published: { color: 'var(--accent-success)', bg: 'rgba(12,163,12,0.1)', label: 'Published' },
   failed: { color: 'var(--accent-danger)', bg: 'rgba(208,59,59,0.1)', label: 'Failed' }
 };
-const STATUS_OPTIONS = [
-  { value: 'pending', label: 'Pending' },
-  { value: 'publishing', label: 'Publishing' },
-  { value: 'published', label: 'Published' },
-  { value: 'failed', label: 'Failed' }
+
+const SUB_TABS = [
+  { key: 'scheduled', label: 'Scheduled', statuses: ['pending', 'publishing'] },
+  { key: 'published', label: 'Published', statuses: ['published', 'failed'] }
 ];
 
 function platformInitial(p) {
@@ -79,20 +81,22 @@ function PostErrors({ results }) {
   );
 }
 
-function Calendar({ authFetch }) {
+function Posts({ authFetch, setCurrentView }) {
   const [posts, setPosts] = useState(null);
   const [error, setError] = useState(null);
-  const [statusFilter, setStatusFilter] = useState('');
+  const [subTab, setSubTab] = useState('scheduled');
   const [platformFilter, setPlatformFilter] = useState('');
+  const [brand, setBrand] = useState('');
+  const [search, setSearch] = useState('');
   const [collapsedDates, setCollapsedDates] = useState({});
 
   const load = async () => {
     try {
       const params = new URLSearchParams();
-      if (statusFilter) params.set('status', statusFilter);
+      if (brand.trim()) params.set('brand', brand.trim());
       const res = await authFetch(`${SOCIAL_API_BASE}/posts?${params.toString()}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not load scheduled posts.');
+      if (!res.ok) throw new Error(data.error || 'Could not load posts.');
       setPosts((data.posts || []).sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at)));
     } catch (err) {
       setError(err.message);
@@ -100,7 +104,7 @@ function Calendar({ authFetch }) {
     }
   };
 
-  useEffect(() => { load(); }, [statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [brand]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cancel = async (id) => {
     if (!confirm('Cancel this pending post?')) return;
@@ -115,24 +119,48 @@ function Calendar({ authFetch }) {
 
   const toggleDate = (date) => setCollapsedDates(prev => ({ ...prev, [date]: !prev[date] }));
 
-  const filteredPosts = platformFilter
-    ? (posts || []).filter(p => (p.target_platforms || []).includes(platformFilter))
-    : posts;
-  const groups = filteredPosts ? groupByDate(filteredPosts) : {};
+  const activeStatuses = (SUB_TABS.find(t => t.key === subTab) || SUB_TABS[0]).statuses;
+  const searchLower = search.trim().toLowerCase();
+
+  const filteredPosts = (posts || []).filter(p => {
+    if (!activeStatuses.includes(p.status)) return false;
+    if (platformFilter && !(p.target_platforms || []).includes(platformFilter)) return false;
+    if (searchLower && !(p.content || '').toLowerCase().includes(searchLower)) return false;
+    return true;
+  });
+  const groups = posts ? groupByDate(filteredPosts) : {};
+  const countFor = (statuses) => (posts || []).filter(p => statuses.includes(p.status)).length;
 
   return (
     <div>
       <div className="header-container">
         <div className="title-area">
-          <h1>Calendar</h1>
-          <p>Every scheduled, publishing, published, and failed post, newest first.</p>
+          <h1>Posts</h1>
+          <p>Everything scheduled and everything already published, across every connected account.</p>
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={load}>
-          <RefreshCw size={14} /> Refresh
-        </button>
+        <div style={{ display: 'flex', gap: '0.6rem' }}>
+          <button className="btn btn-secondary btn-sm" onClick={load}>
+            <RefreshCw size={14} /> Refresh
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={() => setCurrentView('social-compose')}>
+            <PenSquare size={14} /> New Post
+          </button>
+        </div>
       </div>
 
       {error && <p style={{ color: 'var(--accent-danger)', marginBottom: '1rem' }}>{error}</p>}
+
+      <div className="range-tabs" style={{ marginBottom: '1rem', display: 'inline-flex' }}>
+        {SUB_TABS.map(t => (
+          <button
+            key={t.key}
+            className={`range-tab ${subTab === t.key ? 'active' : ''}`}
+            onClick={() => setSubTab(t.key)}
+          >
+            {t.label} <span style={{ opacity: 0.75 }}>({countFor(t.statuses)})</span>
+          </button>
+        ))}
+      </div>
 
       <div className="platform-tabs">
         <div className={`platform-tab ${platformFilter === '' ? 'active' : ''}`} onClick={() => setPlatformFilter('')}>
@@ -144,16 +172,28 @@ function Calendar({ authFetch }) {
             {PLATFORM_LABELS[p]}
           </div>
         ))}
-        <select className="tool-select" style={{ marginLeft: 'auto' }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="">All statuses</option>
-          {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
+          <div className="search-bar" style={{ width: 200 }}>
+            <Search size={14} style={{ color: 'var(--text-muted)' }} />
+            <input placeholder="Search post content…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+          <input
+            type="text"
+            className="form-control"
+            style={{ width: 140 }}
+            placeholder="Brand"
+            value={brand}
+            onChange={(e) => setBrand(e.target.value)}
+          />
+        </div>
       </div>
 
-      {filteredPosts === null ? (
-        <div className="trend-chart-empty">Loading scheduled posts...</div>
+      {posts === null ? (
+        <div className="trend-chart-empty">Loading posts...</div>
       ) : filteredPosts.length === 0 ? (
-        <div className="trend-chart-empty">No posts match these filters.</div>
+        <div className="trend-chart-empty">
+          {subTab === 'scheduled' ? 'Nothing scheduled — write one in Compose.' : 'No published posts match these filters yet.'}
+        </div>
       ) : (
         Object.entries(groups).map(([date, datePosts]) => {
           const collapsed = !!collapsedDates[date];
@@ -208,4 +248,4 @@ function Calendar({ authFetch }) {
   );
 }
 
-export default Calendar;
+export default Posts;
