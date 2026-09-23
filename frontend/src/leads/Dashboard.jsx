@@ -28,6 +28,23 @@ const TREND_DAYS = 14;
 const FUNNEL_COLORS = ['#86b6ef', '#5598e7', '#2a78d6', '#1c5cab', '#104281'];
 const CHART_TOOLTIP_STYLE = { background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12, boxShadow: 'var(--shadow-md)' };
 
+// Real campaign names (Meta Lead Ads form/ad names) run 40-60+ characters —
+// recharts' default category-axis tick wraps long labels onto multiple
+// lines instead of clipping, and at this chart's row height that wrapped
+// text overlaps the row above/below it. A single-line, ellipsis-truncated
+// tick avoids the wrap entirely; the bar's own hover tooltip (labelled by
+// the untruncated category value) is where the full name still shows.
+function TruncatedYAxisTick({ x, y, payload, maxChars = 24 }) {
+  const raw = String(payload.value || '');
+  const text = raw.length > maxChars ? `${raw.slice(0, maxChars - 1)}…` : raw;
+  return (
+    <text x={x} y={y} dy={4} textAnchor="end" fontSize={11} fill="var(--text-secondary)">
+      {text}
+      {raw.length > maxChars && <title>{raw}</title>}
+    </text>
+  );
+}
+
 function fmt(n) {
   if (n === null || n === undefined) return '—';
   return n.toLocaleString();
@@ -221,7 +238,7 @@ function Dashboard({ authFetch, setCurrentView }) {
             <div className="trend-chart-empty">Loading…</div>
           ) : (
             <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={trendData} margin={{ top: 10, right: 12, left: -12, bottom: 0 }}>
+              <AreaChart data={trendData} margin={{ top: 14, right: 12, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="leadsTrendFill" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#2a78d6" stopOpacity={0.15} />
@@ -230,7 +247,7 @@ function Dashboard({ authFetch, setCurrentView }) {
                 </defs>
                 <CartesianGrid stroke="var(--border-color)" vertical={false} />
                 <XAxis dataKey="date" interval={2} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} width={28} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} width={32} />
                 <RTooltip formatter={(value) => [`${value} lead${value === 1 ? '' : 's'}`, 'Captured']} contentStyle={CHART_TOOLTIP_STYLE} />
                 <Area type="monotone" dataKey="count" stroke="#2a78d6" strokeWidth={2} fill="url(#leadsTrendFill)" activeDot={{ r: 4 }} />
               </AreaChart>
@@ -248,12 +265,12 @@ function Dashboard({ authFetch, setCurrentView }) {
           ) : topCampaigns.length === 0 ? (
             <div className="trend-chart-empty">No campaign data yet.</div>
           ) : (
-            <ResponsiveContainer width="100%" height={Math.max(topCampaigns.length * 34, 140)}>
-              <BarChart data={topCampaigns} layout="vertical" margin={{ top: 0, right: 28, left: 0, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={Math.max(topCampaigns.length * 38, 140)}>
+              <BarChart data={topCampaigns} layout="vertical" margin={{ top: 4, right: 28, left: 0, bottom: 4 }}>
                 <XAxis type="number" allowDecimals={false} hide />
-                <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" width={150} tick={<TruncatedYAxisTick maxChars={22} />} axisLine={false} tickLine={false} interval={0} />
                 <RTooltip formatter={(value) => [`${value} lead${value === 1 ? '' : 's'}`, 'Captured']} contentStyle={CHART_TOOLTIP_STYLE} />
-                <Bar dataKey="count" fill="#2a78d6" radius={[0, 4, 4, 0]} barSize={14}>
+                <Bar dataKey="count" fill="#2a78d6" radius={[0, 4, 4, 0]} barSize={16}>
                   <LabelList dataKey="count" position="right" style={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
                 </Bar>
               </BarChart>
