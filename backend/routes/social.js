@@ -271,9 +271,12 @@ protectedRouter.post('/social/whatsapp/embedded-signup', async (req, res) => {
   if (!client) return;
 
   const { code, wabaId, phoneNumberId, brand } = req.body || {};
-  if (!code || !wabaId || !phoneNumberId || !brand) {
-    return res.status(400).json({ error: 'code, wabaId, phoneNumberId and brand are all required.' });
+  if (!code || !wabaId || !brand) {
+    return res.status(400).json({ error: 'code, wabaId and brand are all required.' });
   }
+  // phoneNumberId is optional here — the coexistence (existing WhatsApp
+  // Business App number) flow's postMessage payload can omit it, and
+  // completeEmbeddedSignup() resolves it from wabaId when that happens.
 
   try {
     const result = await ADAPTERS.whatsapp.completeEmbeddedSignup({ code, wabaId, phoneNumberId });
