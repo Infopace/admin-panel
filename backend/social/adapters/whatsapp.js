@@ -111,6 +111,19 @@ async function completeEmbeddedSignup({ code, wabaId, phoneNumberId }) {
 
   await metaOAuth.graphPost(`/${wabaId}/subscribed_apps`, { access_token: userAccessToken });
 
+  // The coexistence sub-flow (an existing WhatsApp Business App number,
+  // featureType 'whatsapp_business_app_onboarding' — see ConnectAccounts.jsx)
+  // reports FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING without a
+  // phone_number_id in its postMessage payload, unlike a plain new-number
+  // signup. Same fallback connect.exchangeCode() above uses: take the
+  // first phone number registered under the WABA.
+  if (!phoneNumberId) {
+    const phoneNumbers = await metaOAuth.graphFetch(`/${wabaId}/phone_numbers`, { access_token: userAccessToken });
+    const first = (phoneNumbers.data || [])[0];
+    if (!first) throw new Error(`WhatsApp Business Account ${wabaId} has no phone number registered yet.`);
+    phoneNumberId = first.id;
+  }
+
   const phone = await metaOAuth.graphFetch(`/${phoneNumberId}`, {
     access_token: userAccessToken,
     fields: 'display_phone_number,verified_name'

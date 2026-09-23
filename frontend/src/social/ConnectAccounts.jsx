@@ -43,8 +43,13 @@ function ConnectAccounts({ authFetch }) {
       if (!event.origin || !event.origin.endsWith('facebook.com')) return;
       try {
         const data = JSON.parse(event.data);
-        if (data.type === 'WA_EMBEDDED_SIGNUP' && data.event === 'FINISH') {
-          embeddedSignupDataRef.current = data.data; // { phone_number_id, waba_id }
+        // Plain signups report 'FINISH'; onboarding an existing WhatsApp
+        // Business App number via coexistence (featureType below) reports
+        // 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' instead, and its data
+        // can omit phone_number_id — completeEmbeddedSignup() on the
+        // backend resolves that from waba_id when it's missing.
+        if (data.type === 'WA_EMBEDDED_SIGNUP' && (data.event === 'FINISH' || data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING')) {
+          embeddedSignupDataRef.current = data.data; // { phone_number_id?, waba_id }
         }
       } catch (err) {
         // not a WA_EMBEDDED_SIGNUP postMessage — ignore
@@ -154,7 +159,12 @@ function ConnectAccounts({ authFetch }) {
           config_id: config.configId,
           response_type: 'code',
           override_default_response_type: true,
-          extras: { setup: {}, featureType: '', sessionInfoVersion: '3' }
+          // 'whatsapp_business_app_onboarding' is what actually shows the
+          // "connect your existing WhatsApp Business app number" (coexistence)
+          // screen — an empty featureType skips straight past it, which is
+          // why a number already active in the WhatsApp Business App on a
+          // phone could never be linked this way before.
+          extras: { setup: {}, featureType: 'whatsapp_business_app_onboarding', sessionInfoVersion: '3' }
         }
       );
     } catch (err) {
