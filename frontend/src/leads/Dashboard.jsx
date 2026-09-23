@@ -1,14 +1,32 @@
 import React, { useEffect, useState } from 'react';
-import { RefreshCw, Target, TrendingUp, CheckCircle2, Megaphone, Mail, Phone } from 'lucide-react';
+import { RefreshCw, Target, TrendingUp, Activity, CheckCircle2, XCircle, Percent, Mail, Phone, Users } from 'lucide-react';
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip as RTooltip, Cell, LabelList, AreaChart, Area
+} from 'recharts';
 import { LEADS_API_BASE, STATUS_OPTIONS, STATUS_COLOR } from './api';
 
-// Leads' own "30-second glance" — same role Social's Dashboard and the
-// assessment-tool Overview play elsewhere in this app. /leads/summary
-// gives exact pipeline counts (real Supabase count queries); the campaign
-// breakdown below is computed client-side from the most recent leads
-// (capped at 500, same cap the Leads list itself uses), so it's labelled
-// "most recent" rather than claimed as an all-time total.
+// Leads' own "30-second glance," redesigned as a CRM/sales dashboard
+// (HubSpot/Salesforce/Zoho-style): a pipeline funnel, a leads-over-time
+// trend, a lead-source ranking, and a per-rep leaderboard, on top of the
+// KPI strip and recent-activity table every other dashboard in this app
+// already has. /leads/summary gives exact pipeline counts (real Supabase
+// count queries); the trend/source/rep breakdowns below are computed
+// client-side from the most recent leads (capped at 500, same cap the
+// Leads list itself uses), so they're labelled "most recent" rather than
+// claimed as an all-time total.
 const LEADS_SAMPLE_LIMIT = 500;
+const TREND_DAYS = 14;
+
+// Ordinal ramp (one hue, monotone lightness — dataviz skill's rule for an
+// ordered sequence like funnel stages) — validated with
+// scripts/validate_palette.js "<ramp>" --mode light --ordinal (all checks
+// pass: monotone L, >=0.06 adjacent gaps, light end 2.06:1 on surface).
+// Literal hex, not var(--accent-primary) — same reason CHART_COLORS in
+// App.jsx hardcodes hex: some browsers don't resolve var() inside SVG
+// presentation attributes.
+const FUNNEL_COLORS = ['#86b6ef', '#5598e7', '#2a78d6', '#1c5cab', '#104281'];
+const CHART_TOOLTIP_STYLE = { background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12, boxShadow: 'var(--shadow-md)' };
 
 function fmt(n) {
   if (n === null || n === undefined) return '—';
@@ -26,31 +44,31 @@ function KpiTile({ icon: Icon, color, label, value, sub }) {
   );
 }
 
-function BarRow({ label, value, max, color }) {
-  const pct = max > 0 ? Math.max(value > 0 ? 4 : 0, Math.round((value / max) * 100)) : 0;
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 40px', alignItems: 'center', gap: '0.75rem', marginBottom: '0.6rem' }}>
-      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-      <div style={{ height: 8, borderRadius: 999, background: 'var(--bg-surface-hover)', overflow: 'hidden' }}>
-        <div style={{ width: `${pct}%`, height: '100%', borderRadius: 999, background: color }} />
-      </div>
-      <span style={{ fontSize: '0.8rem', fontWeight: 700, textAlign: 'right' }}>{fmt(value)}</span>
-    </div>
-  );
+// "YYYY-MM-DD" in local time, for grouping/bucketing by calendar day.
+function dayKey(iso) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function formatShortDate(key) {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function Dashboard({ authFetch, setCurrentView }) {
   const [summary, setSummary] = useState(null);
   const [sampleLeads, setSampleLeads] = useState(null);
   const [total, setTotal] = useState(null);
+  const [users, setUsers] = useState([]);
   const [error, setError] = useState(null);
 
   const load = async () => {
     setError(null);
     try {
-      const [summaryRes, leadsRes] = await Promise.all([
+      const [summaryRes, leadsRes, usersRes] = await Promise.all([
         authFetch(`${LEADS_API_BASE}/summary`),
-        authFetch(`${LEADS_API_BASE}?limit=${LEADS_SAMPLE_LIMIT}`)
+        authFetch(`${LEADS_API_BASE}?limit=${LEADS_SAMPLE_LIMIT}`),
+        authFetch(`${LEADS_API_BASE}/team`)
       ]);
       const summaryData = await summaryRes.json();
       if (!summaryRes.ok) throw new Error(summaryData.error || 'Could not load leads summary.');
@@ -60,6 +78,9 @@ function Dashboard({ authFetch, setCurrentView }) {
       if (!leadsRes.ok) throw new Error(leadsData.error || 'Could not load leads.');
       setSampleLeads(leadsData.leads || []);
       setTotal(leadsData.total ?? (leadsData.leads || []).length);
+
+      const usersData = await usersRes.json();
+      if (usersRes.ok) setUsers(usersData.users || []);
     } catch (err) {
       setError(err.message);
       setSummary({ total: 0, newToday: 0, byStatus: {}, conversionRate: null });
@@ -70,18 +91,56 @@ function Dashboard({ authFetch, setCurrentView }) {
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loading = summary === null;
+  const truncated = total !== null && sampleLeads !== null && total > sampleLeads.length;
 
+  // ---- Pipeline funnel (exact counts from the summary endpoint) ----
+  const FUNNEL_STAGES = STATUS_OPTIONS.filter(o => o.value !== 'lost');
+  const funnelTopValue = summary ? (summary.byStatus[FUNNEL_STAGES[0].value] || 0) : 0;
+  const funnelData = FUNNEL_STAGES.map((o, i) => {
+    const value = summary ? (summary.byStatus[o.value] || 0) : 0;
+    return { name: o.label, value, fill: FUNNEL_COLORS[i], pct: funnelTopValue > 0 ? Math.round((value / funnelTopValue) * 100) : 0 };
+  });
+  const lostCount = summary ? (summary.byStatus.lost || 0) : 0;
+  const lostPct = summary && summary.total > 0 ? Math.round((lostCount / summary.total) * 100) : 0;
+
+  // ---- Lead source ranking (client-side, from the sample) ----
   const campaignCounts = {};
   (sampleLeads || []).forEach(l => {
     const key = l.campaign_name || 'Unattributed';
     campaignCounts[key] = (campaignCounts[key] || 0) + 1;
   });
-  const topCampaigns = Object.entries(campaignCounts).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  const maxCampaign = Math.max(1, ...topCampaigns.map(([, c]) => c));
-  const truncated = total !== null && sampleLeads !== null && total > sampleLeads.length;
+  const topCampaigns = Object.entries(campaignCounts)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
 
-  const maxStatus = Math.max(1, ...STATUS_OPTIONS.map(o => (summary && summary.byStatus[o.value]) || 0));
-  const recentLeads = (sampleLeads || []).slice(0, 6);
+  // ---- Leads captured per day, last 14 days (client-side, from the sample) ----
+  const trendCounts = {};
+  (sampleLeads || []).forEach(l => {
+    if (!l.created_time) return;
+    const key = dayKey(l.created_time);
+    trendCounts[key] = (trendCounts[key] || 0) + 1;
+  });
+  const trendData = Array.from({ length: TREND_DAYS }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (TREND_DAYS - 1 - i));
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return { key, date: formatShortDate(key), count: trendCounts[key] || 0 };
+  });
+
+  // ---- Rep leaderboard (client-side, from the sample) ----
+  const userEmailById = {};
+  users.forEach(u => { userEmailById[u.id] = u.email; });
+  const repStats = {};
+  (sampleLeads || []).forEach(l => {
+    const key = l.assigned_to || '__unassigned';
+    if (!repStats[key]) repStats[key] = { id: key, name: key === '__unassigned' ? 'Unassigned' : (userEmailById[key] || key), leads: 0, won: 0 };
+    repStats[key].leads += 1;
+    if (l.status === 'won') repStats[key].won += 1;
+  });
+  const repRows = Object.values(repStats).sort((a, b) => b.leads - a.leads);
+
+  const recentLeads = (sampleLeads || []).slice(0, 8);
 
   return (
     <div>
@@ -99,52 +158,143 @@ function Dashboard({ authFetch, setCurrentView }) {
 
       <div className="kpi-grid" style={{ marginBottom: '1.5rem' }}>
         <KpiTile icon={Target} color="#2a78d6" label="Total Leads" value={loading ? '—' : fmt(summary.total)} />
-        <KpiTile icon={TrendingUp} color="#0d8f73" label="New Today" value={loading ? '—' : fmt(summary.newToday)} />
-        <KpiTile icon={CheckCircle2} color="#0ca30c" label="Won" value={loading ? '—' : fmt(summary.byStatus.won || 0)} />
+        <KpiTile icon={TrendingUp} color="#1baf7a" label="New Today" value={loading ? '—' : fmt(summary.newToday)} />
         <KpiTile
-          icon={Megaphone}
-          color="#b8690a"
+          icon={Activity}
+          color="#eda100"
+          label="In Progress"
+          value={loading ? '—' : fmt((summary.byStatus.contacted || 0) + (summary.byStatus.qualified || 0) + (summary.byStatus.proposal || 0))}
+        />
+        <KpiTile icon={CheckCircle2} color="#0ca30c" label="Won" value={loading ? '—' : fmt(summary.byStatus.won || 0)} />
+        <KpiTile icon={XCircle} color="#d03b3b" label="Lost" value={loading ? '—' : fmt(summary.byStatus.lost || 0)} />
+        <KpiTile
+          icon={Percent}
+          color="#4a3aa7"
           label="Conversion Rate"
           value={loading ? '—' : (summary.conversionRate === null ? '—' : `${summary.conversionRate}%`)}
           sub="won / (won + lost)"
         />
       </div>
 
+      <div className="panel">
+        <div className="panel-header">
+          <h2>Sales Funnel</h2>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>exact pipeline counts</span>
+        </div>
+        {loading ? (
+          <div className="trend-chart-empty">Loading…</div>
+        ) : (
+          <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ flex: '1 1 420px', minWidth: 320 }}>
+              <ResponsiveContainer width="100%" height={Math.max(funnelData.length * 46, 160)}>
+                <BarChart data={funnelData} layout="vertical" margin={{ top: 0, right: 36, left: 0, bottom: 0 }}>
+                  <XAxis type="number" hide />
+                  <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} />
+                  <RTooltip
+                    formatter={(value, name, props) => [`${value} leads (${props.payload.pct}% of ${FUNNEL_STAGES[0].label})`, props.payload.name]}
+                    contentStyle={CHART_TOOLTIP_STYLE}
+                  />
+                  <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={26}>
+                    {funnelData.map(d => <Cell key={d.name} fill={d.fill} />)}
+                    <LabelList dataKey="value" position="right" style={{ fontSize: 12, fontWeight: 700, fill: 'var(--text-primary)' }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div style={{ flex: '0 0 180px', textAlign: 'center', padding: '1rem', borderRadius: 'var(--radius-md)', background: 'rgba(208,59,59,0.06)', border: '1px solid rgba(208,59,59,0.2)' }}>
+              <XCircle size={20} style={{ color: 'var(--accent-danger)', marginBottom: '0.4rem' }} />
+              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--accent-danger)' }}>{fmt(lostCount)}</div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Lost</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>{lostPct}% of all leads</div>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="split-grid">
         <div className="panel">
-          <div className="panel-header"><h2>Pipeline by Stage</h2></div>
-          {loading ? (
+          <div className="panel-header">
+            <h2>Leads Over Time</h2>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>last {TREND_DAYS} days{truncated ? `, latest ${sampleLeads.length}` : ''}</span>
+          </div>
+          {sampleLeads === null ? (
             <div className="trend-chart-empty">Loading…</div>
           ) : (
-            STATUS_OPTIONS.map(o => (
-              <BarRow
-                key={o.value}
-                label={o.label}
-                value={summary.byStatus[o.value] || 0}
-                max={maxStatus}
-                color={STATUS_COLOR[o.value]}
-              />
-            ))
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={trendData} margin={{ top: 10, right: 12, left: -12, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="leadsTrendFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2a78d6" stopOpacity={0.15} />
+                    <stop offset="100%" stopColor="#2a78d6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="var(--border-color)" vertical={false} />
+                <XAxis dataKey="date" interval={2} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} width={28} />
+                <RTooltip formatter={(value) => [`${value} lead${value === 1 ? '' : 's'}`, 'Captured']} contentStyle={CHART_TOOLTIP_STYLE} />
+                <Area type="monotone" dataKey="count" stroke="#2a78d6" strokeWidth={2} fill="url(#leadsTrendFill)" activeDot={{ r: 4 }} />
+              </AreaChart>
+            </ResponsiveContainer>
           )}
         </div>
 
         <div className="panel">
           <div className="panel-header">
-            <h2>Top Campaigns</h2>
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-              {truncated ? `among latest ${sampleLeads.length} leads` : 'all leads'}
-            </span>
+            <h2>Lead Sources</h2>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{truncated ? `latest ${sampleLeads.length}` : 'all leads'}</span>
           </div>
           {sampleLeads === null ? (
             <div className="trend-chart-empty">Loading…</div>
           ) : topCampaigns.length === 0 ? (
             <div className="trend-chart-empty">No campaign data yet.</div>
           ) : (
-            topCampaigns.map(([name, count]) => (
-              <BarRow key={name} label={name} value={count} max={maxCampaign} color="var(--accent-primary)" />
-            ))
+            <ResponsiveContainer width="100%" height={Math.max(topCampaigns.length * 34, 140)}>
+              <BarChart data={topCampaigns} layout="vertical" margin={{ top: 0, right: 28, left: 0, bottom: 0 }}>
+                <XAxis type="number" allowDecimals={false} hide />
+                <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} />
+                <RTooltip formatter={(value) => [`${value} lead${value === 1 ? '' : 's'}`, 'Captured']} contentStyle={CHART_TOOLTIP_STYLE} />
+                <Bar dataKey="count" fill="#2a78d6" radius={[0, 4, 4, 0]} barSize={14}>
+                  <LabelList dataKey="count" position="right" style={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           )}
         </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-header">
+          <h2><Users size={16} style={{ marginRight: '0.4rem', verticalAlign: -3 }} />Rep Performance</h2>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{truncated ? `latest ${sampleLeads.length} leads` : 'all leads'}</span>
+        </div>
+        {sampleLeads === null ? (
+          <div className="trend-chart-empty">Loading…</div>
+        ) : repRows.length === 0 ? (
+          <div className="trend-chart-empty">No leads to attribute yet.</div>
+        ) : (
+          <div className="table-container">
+            <table className="custom-table custom-table-compact">
+              <thead>
+                <tr>
+                  <th>Assignee</th>
+                  <th style={{ textAlign: 'right' }}>Leads</th>
+                  <th style={{ textAlign: 'right' }}>Won</th>
+                  <th style={{ textAlign: 'right' }}>Conversion</th>
+                </tr>
+              </thead>
+              <tbody>
+                {repRows.map(r => (
+                  <tr key={r.id}>
+                    <td style={{ fontWeight: 600 }}>{r.name}</td>
+                    <td style={{ textAlign: 'right' }}>{r.leads}</td>
+                    <td style={{ textAlign: 'right', color: 'var(--accent-success)', fontWeight: 700 }}>{r.won}</td>
+                    <td style={{ textAlign: 'right' }}>{r.leads > 0 ? `${Math.round((r.won / r.leads) * 100)}%` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="panel">
