@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { RefreshCw, AtSign, MessageSquare, ExternalLink } from 'lucide-react';
-import { SOCIAL_API_BASE, PLATFORM_LABELS, AVAILABLE_PLATFORMS } from './api';
+import { SOCIAL_API_BASE, PLATFORM_LABELS, PLATFORM_COLORS, AVAILABLE_PLATFORMS } from './api';
 
 // Unified "all queries and leads in one place" view — mentions (comments,
 // reviews) and inbox_messages (DMs) merged server-side into one list by
 // GET /social/interactions, so this page never branches on which table a
-// row came from beyond the "MENTION"/"MESSAGE" badge. Mirrors the
-// table-section/table-header/custom-table shell every other data table in
-// this app already uses (see App.jsx's candidates table), not a new look.
+// row came from beyond the "MENTION"/"MESSAGE" badge. Laid out as a
+// Zoho-Social-style interaction list (avatar + platform badge, colored
+// pill selects) rather than a plain data table, but reads the exact same
+// fields/endpoints the table version did.
 const STATUS_OPTIONS = [
   { value: 'open', label: 'Open' },
   { value: 'under_review', label: 'Under Review' },
@@ -20,6 +21,22 @@ const PRIORITY_OPTIONS = [
 ];
 const STATUS_COLOR = { open: 'var(--accent-warning)', under_review: 'var(--accent-primary)', closed: 'var(--accent-success)' };
 const PRIORITY_COLOR = { high: 'var(--accent-danger)', medium: 'var(--accent-warning)', low: 'var(--text-secondary)' };
+
+function initials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  return parts.slice(0, 2).map(p => p[0]).join('').toUpperCase();
+}
+
+// Deterministic avatar tint from the author's name, so the same person
+// always gets the same color across a session without a real avatar image.
+const AVATAR_PALETTE = ['#2a78d6', '#0d8f73', '#b8690a', '#4a3aa7', '#e34948', '#1baf7a', '#e87ba4'];
+function avatarColor(name) {
+  if (!name) return AVATAR_PALETTE[0];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+}
 
 function Inbox({ authFetch }) {
   const [interactions, setInteractions] = useState(null);
@@ -85,13 +102,21 @@ function Inbox({ authFetch }) {
 
       {error && <p style={{ color: 'var(--accent-danger)', marginBottom: '1rem' }}>{error}</p>}
 
+      <div className="platform-tabs">
+        <div className={`platform-tab ${filters.platform === '' ? 'active' : ''}`} onClick={() => setFilter('platform', '')}>
+          All
+        </div>
+        {AVAILABLE_PLATFORMS.map(p => (
+          <div key={p} className={`platform-tab ${filters.platform === p ? 'active' : ''}`} onClick={() => setFilter('platform', p)}>
+            <span className="dot" style={{ background: filters.platform === p ? '#fff' : (PLATFORM_COLORS[p] || 'var(--text-muted)') }} />
+            {PLATFORM_LABELS[p]}
+          </div>
+        ))}
+      </div>
+
       <div className="table-section">
         <div className="table-header">
           <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-            <select className="tool-select" value={filters.platform} onChange={(e) => setFilter('platform', e.target.value)}>
-              <option value="">All platforms</option>
-              {AVAILABLE_PLATFORMS.map(p => <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>)}
-            </select>
             <select className="tool-select" value={filters.type} onChange={(e) => setFilter('type', e.target.value)}>
               <option value="">All types</option>
               <option value="mention">Mentions</option>
@@ -115,86 +140,74 @@ function Inbox({ authFetch }) {
           </div>
         </div>
 
-        <div className="table-container">
-          <table className="custom-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Interaction</th>
-                <th>Priority</th>
-                <th>Assignee</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {interactions === null ? (
-                <tr><td colSpan="5" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>Loading…</td></tr>
-              ) : interactions.length === 0 ? (
-                <tr><td colSpan="5" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>Nothing here yet — connected accounts are synced every 10 minutes.</td></tr>
-              ) : (
-                interactions.map(item => (
-                  <tr key={`${item.source}-${item.id}`}>
-                    <td style={{ whiteSpace: 'nowrap', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
-                      {new Date(item.date).toLocaleDateString()}<br />{new Date(item.date).toLocaleTimeString()}
-                    </td>
-                    <td style={{ whiteSpace: 'normal', minWidth: 320 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600 }}>
-                        {item.author || 'Unknown'}
-                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                          {PLATFORM_LABELS[item.platform] || item.platform}
-                        </span>
-                      </div>
-                      <div style={{ color: 'var(--text-secondary)', margin: '0.2rem 0' }}>{item.text}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                        {item.source === 'mention' ? <AtSign size={12} /> : <MessageSquare size={12} />}
-                        {item.source === 'mention' ? 'MENTION' : 'MESSAGE'}
-                        {item.brand ? ` · ${item.brand}` : ''}
-                        {item.url && (
-                          <a href={item.url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-primary)', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
-                            <ExternalLink size={12} /> View
-                          </a>
-                        )}
-                      </div>
-                    </td>
-                    <td>
-                      <select
-                        className="tool-select"
-                        value={item.priority}
-                        disabled={savingId === item.id}
-                        style={{ color: PRIORITY_COLOR[item.priority], fontWeight: 700 }}
-                        onChange={(e) => patch(item, { priority: e.target.value })}
-                      >
-                        {PRIORITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
-                    </td>
-                    <td>
-                      <select
-                        className="tool-select"
-                        value={item.assignedTo || ''}
-                        disabled={savingId === item.id}
-                        onChange={(e) => patch(item, { assignedTo: e.target.value })}
-                      >
-                        <option value="">Unassigned</option>
-                        {users.map(u => <option key={u.id} value={u.id}>{u.email}</option>)}
-                      </select>
-                    </td>
-                    <td>
-                      <select
-                        className="tool-select"
-                        value={item.interactionStatus}
-                        disabled={savingId === item.id}
-                        style={{ color: STATUS_COLOR[item.interactionStatus], fontWeight: 700 }}
-                        onChange={(e) => patch(item, { interactionStatus: e.target.value })}
-                      >
-                        {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        {interactions === null ? (
+          <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>Loading…</div>
+        ) : interactions.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>Nothing here yet — connected accounts are synced every 10 minutes.</div>
+        ) : (
+          <div className="inbox-list">
+            {interactions.map(item => (
+              <div className="inbox-row" key={`${item.source}-${item.id}`}>
+                <div className="inbox-avatar-wrap">
+                  <div className="inbox-avatar" style={{ background: avatarColor(item.author) }}>
+                    {initials(item.author)}
+                  </div>
+                  <div className="inbox-platform-badge" style={{ background: PLATFORM_COLORS[item.platform] || 'var(--text-muted)' }}>
+                    {item.source === 'mention' ? <AtSign size={9} /> : <MessageSquare size={9} />}
+                  </div>
+                </div>
+
+                <div className="inbox-body">
+                  <div className="inbox-body-top">
+                    <span className="inbox-author">{item.author || 'Unknown'}</span>
+                    <span className="inbox-meta">{PLATFORM_LABELS[item.platform] || item.platform}</span>
+                    {item.brand && <span className="inbox-meta">· {item.brand}</span>}
+                  </div>
+                  <p className="inbox-text">{item.text}</p>
+                  <div className="inbox-footer">
+                    <span>{new Date(item.date).toLocaleDateString()} · {new Date(item.date).toLocaleTimeString()}</span>
+                    <span>{item.source === 'mention' ? 'Mention' : 'Message'}</span>
+                    {item.url && (
+                      <a href={item.url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-primary)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <ExternalLink size={12} /> View
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                <div className="inbox-controls">
+                  <select
+                    className="pill-select"
+                    value={item.priority}
+                    disabled={savingId === item.id}
+                    style={{ color: PRIORITY_COLOR[item.priority], background: `${PRIORITY_COLOR[item.priority]}18`, borderColor: 'transparent' }}
+                    onChange={(e) => patch(item, { priority: e.target.value })}
+                  >
+                    {PRIORITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                  <select
+                    className="pill-select"
+                    value={item.interactionStatus}
+                    disabled={savingId === item.id}
+                    style={{ color: STATUS_COLOR[item.interactionStatus], background: `${STATUS_COLOR[item.interactionStatus]}18`, borderColor: 'transparent' }}
+                    onChange={(e) => patch(item, { interactionStatus: e.target.value })}
+                  >
+                    {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                  <select
+                    className="inbox-assignee-select"
+                    value={item.assignedTo || ''}
+                    disabled={savingId === item.id}
+                    onChange={(e) => patch(item, { assignedTo: e.target.value })}
+                  >
+                    <option value="">Unassigned</option>
+                    {users.map(u => <option key={u.id} value={u.id}>{u.email}</option>)}
+                  </select>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

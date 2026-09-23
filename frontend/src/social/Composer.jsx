@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Send, AlertTriangle } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Send, AlertTriangle, UploadCloud, Film, X, Link2 } from 'lucide-react';
 import { SOCIAL_API_BASE, PLATFORM_LABELS } from './api';
 
 // Per-platform limits this composer actually warns about — kept to what
@@ -13,15 +13,23 @@ const CHAR_LIMITS = {
   linkedin: { field: 'commentary', limit: 3000, note: 'LinkedIn posts (personal profile only) cap at 3000 characters.' }
 };
 
+let mediaItemSeq = 0;
+
 function Composer({ authFetch }) {
   const [accounts, setAccounts] = useState(null);
   const [brand, setBrand] = useState('infopace');
   const [content, setContent] = useState('');
-  const [mediaUrlsText, setMediaUrlsText] = useState('');
+  // Uploaded/attached media — { id, url, previewSrc, mediaType, uploading, error }.
+  // Kept separate from the pasted-URL fallback field so an in-flight upload
+  // never silently drops a URL someone was mid-typing, and vice versa.
+  const [mediaItems, setMediaItems] = useState([]);
+  const [pastedUrl, setPastedUrl] = useState('');
+  const [dragOver, setDragOver] = useState(false);
   const [selectedAccountIds, setSelectedAccountIds] = useState([]);
   const [scheduledAt, setScheduledAt] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     authFetch(`${SOCIAL_API_BASE}/accounts`)
@@ -46,7 +54,45 @@ function Composer({ authFetch }) {
     (accounts || []).filter(a => selectedAccountIds.includes(a.id)).map(a => a.platform)
   ));
 
-  const mediaUrls = mediaUrlsText.split('\n').map(s => s.trim()).filter(Boolean);
+  const uploadFiles = (files) => {
+    Array.from(files).forEach(file => {
+      if (!/^image\/|^video\//.test(file.type)) {
+        setResult({ type: 'error', text: `${file.name} isn't an image or video — skipped.` });
+        return;
+      }
+      const id = ++mediaItemSeq;
+      const previewSrc = URL.createObjectURL(file);
+      const mediaType = file.type.startsWith('video/') ? 'video' : 'image';
+      setMediaItems(prev => [...prev, { id, previewSrc, mediaType, uploading: true, url: null, error: null }]);
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('brand', brand);
+
+      authFetch(`${SOCIAL_API_BASE}/media/upload`, { method: 'POST', body: formData })
+        .then(async res => {
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Upload failed.');
+          setMediaItems(prev => prev.map(m => (m.id === id ? { ...m, uploading: false, url: data.url } : m)));
+        })
+        .catch(err => {
+          setMediaItems(prev => prev.map(m => (m.id === id ? { ...m, uploading: false, error: err.message } : m)));
+        });
+    });
+  };
+
+  const removeMediaItem = (id) => setMediaItems(prev => prev.filter(m => m.id !== id));
+
+  const addPastedUrl = () => {
+    const url = pastedUrl.trim();
+    if (!url) return;
+    const mediaType = /\.(mp4|mov|webm|m4v)(\?|$)/i.test(url) ? 'video' : 'image';
+    setMediaItems(prev => [...prev, { id: ++mediaItemSeq, previewSrc: url, mediaType, uploading: false, url, error: null }]);
+    setPastedUrl('');
+  };
+
+  const mediaUrls = mediaItems.filter(m => m.url).map(m => m.url);
+  const mediaUploading = mediaItems.some(m => m.uploading);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -56,6 +102,10 @@ function Composer({ authFetch }) {
     }
     if (!scheduledAt) {
       setResult({ type: 'error', text: 'Pick a schedule date/time (use now for an immediate post).' });
+      return;
+    }
+    if (mediaUploading) {
+      setResult({ type: 'error', text: 'Still uploading media — wait for it to finish before scheduling.' });
       return;
     }
 
@@ -77,7 +127,8 @@ function Composer({ authFetch }) {
       if (!res.ok) throw new Error(data.error || 'Could not schedule post.');
       setResult({ type: 'success', text: 'Post scheduled — check Calendar for its status.' });
       setContent('');
-      setMediaUrlsText('');
+      setMediaItems([]);
+      setPastedUrl('');
       setSelectedAccountIds([]);
       setScheduledAt('');
     } catch (err) {
@@ -129,14 +180,68 @@ function Composer({ authFetch }) {
         ))}
 
         <div className="form-group">
-          <label>Media URL(s) — one per line (required for YouTube and Instagram; optional elsewhere)</label>
-          <textarea
-            className="form-control"
-            rows={2}
-            placeholder="https://example.com/my-video.mp4"
-            value={mediaUrlsText}
-            onChange={(e) => setMediaUrlsText(e.target.value)}
-          />
+          <label>Photo / Video (required for YouTube and Instagram; optional elsewhere)</label>
+
+          <div
+            className={`media-upload-zone ${dragOver ? 'dragover' : ''}`}
+            onClick={() => fileInputRef.current && fileInputRef.current.click()}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              if (e.dataTransfer.files && e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+            }}
+          >
+            <UploadCloud size={22} style={{ color: 'var(--accent-primary)', marginBottom: '0.4rem' }} />
+            <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Click to upload, or drag and drop</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>Images or videos, up to 50MB each</div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              style={{ display: 'none' }}
+              onChange={(e) => { if (e.target.files && e.target.files.length) uploadFiles(e.target.files); e.target.value = ''; }}
+            />
+          </div>
+
+          {mediaItems.length > 0 && (
+            <div className="media-chip-row">
+              {mediaItems.map(m => (
+                <div className="media-chip" key={m.id}>
+                  {m.mediaType === 'video' ? (
+                    <video src={m.previewSrc} muted />
+                  ) : (
+                    <img src={m.previewSrc} alt="" />
+                  )}
+                  {m.mediaType === 'video' && (
+                    <span style={{ position: 'absolute', bottom: 3, left: 3, background: 'rgba(15,18,30,0.65)', color: '#fff', borderRadius: 4, padding: '1px 4px', display: 'flex', alignItems: 'center', gap: 2, fontSize: '0.62rem' }}>
+                      <Film size={10} /> video
+                    </span>
+                  )}
+                  {m.uploading && <div className="media-chip-uploading">Uploading…</div>}
+                  {m.error && <div className="media-chip-uploading" style={{ color: 'var(--accent-danger)' }} title={m.error}>Failed</div>}
+                  <button type="button" className="media-chip-remove" onClick={() => removeMediaItem(m.id)}>
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem' }}>
+            <Link2 size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+            <input
+              type="text"
+              className="form-control"
+              placeholder="…or paste an already-hosted media URL"
+              value={pastedUrl}
+              onChange={(e) => setPastedUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPastedUrl(); } }}
+            />
+            <button type="button" className="btn btn-secondary btn-sm" onClick={addPastedUrl}>Add</button>
+          </div>
         </div>
 
         <div className="form-group">
@@ -170,8 +275,8 @@ function Composer({ authFetch }) {
           <p style={{ color: result.type === 'success' ? 'var(--accent-success)' : 'var(--accent-danger)' }}>{result.text}</p>
         )}
 
-        <button type="submit" className="btn btn-primary btn-sm" disabled={submitting}>
-          <Send size={14} /> {submitting ? 'Scheduling...' : 'Schedule Post'}
+        <button type="submit" className="btn btn-primary btn-sm" disabled={submitting || mediaUploading}>
+          <Send size={14} /> {submitting ? 'Scheduling...' : mediaUploading ? 'Uploading media…' : 'Schedule Post'}
         </button>
       </form>
     </div>

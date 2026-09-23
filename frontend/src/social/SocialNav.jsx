@@ -1,5 +1,5 @@
 import React from 'react';
-import { PenSquare, Calendar as CalendarIcon, Inbox as InboxIcon, LineChart, Link2 } from 'lucide-react';
+import { LayoutGrid, PenSquare, Calendar as CalendarIcon, Inbox as InboxIcon, LineChart, Link2 } from 'lucide-react';
 
 // Sidebar sub-section for the Social module — same menu-section/menu-list/
 // menu-link markup as every other sidebar section in App.jsx (see
@@ -7,9 +7,11 @@ import { PenSquare, Calendar as CalendarIcon, Inbox as InboxIcon, LineChart, Lin
 // more section of the same shell, not a bolted-on second nav. Phase 3
 // added Inbox — one unified view over mentions + inbox_messages (see
 // social/Inbox.jsx). Phase 4 adds Analytics — the "Brand Health"
-// followers/reach/engagement summary (see social/Analytics.jsx).
+// followers/reach/engagement summary (see social/Analytics.jsx). Phase 5
+// adds Dashboard — the rolled-up KPI landing page (see social/Dashboard.jsx).
 function SocialNav({ currentView, setCurrentView }) {
   const items = [
+    { view: 'social-dashboard', icon: LayoutGrid, label: 'Dashboard' },
     { view: 'social-compose', icon: PenSquare, label: 'Compose' },
     { view: 'social-calendar', icon: CalendarIcon, label: 'Calendar' },
     { view: 'social-inbox', icon: InboxIcon, label: 'Inbox' },

@@ -20,6 +20,7 @@
 
 const express = require('express');
 const crypto = require('crypto');
+const multer = require('multer');
 const ADAPTERS = require('../social/adapters');
 const tokenCrypto = require('../social/crypto');
 const { getSocialClient } = require('../social/db');
@@ -301,6 +302,70 @@ protectedRouter.post('/social/accounts/:id/disconnect', async (req, res) => {
   const { error } = await client.from('social_accounts').update({ status: 'revoked' }).eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
+});
+
+// Composer's image/video upload — Instagram/YouTube (and every other
+// adapter) publish from a URL, not a raw file, so this just gets a
+// picked file into Supabase Storage and hands back its public URL; from
+// there it's indistinguishable from a pasted external URL to the rest of
+// the posting pipeline (media_urls is a plain string array either way).
+const mediaUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB — comfortably covers what these adapters accept
+  fileFilter: (req, file, cb) => {
+    if (!/^image\/|^video\//.test(file.mimetype)) {
+      return cb(new Error('Only image or video files are accepted.'));
+    }
+    cb(null, true);
+  }
+});
+
+const MEDIA_BUCKET = process.env.SUPABASE_SOCIAL_MEDIA_BUCKET || 'social-media';
+let mediaBucketReady = false;
+
+// Idempotent — createBucket errors if it already exists (e.g. a
+// concurrent request lost the race), which is fine, not fatal.
+async function ensureMediaBucket(client) {
+  if (mediaBucketReady) return;
+  const { data: buckets, error } = await client.storage.listBuckets();
+  if (!error && buckets && buckets.some(b => b.name === MEDIA_BUCKET)) {
+    mediaBucketReady = true;
+    return;
+  }
+  await client.storage.createBucket(MEDIA_BUCKET, { public: true }).catch(() => {});
+  mediaBucketReady = true;
+}
+
+protectedRouter.post('/social/media/upload', (req, res) => {
+  mediaUpload.single('file')(req, res, async (uploadErr) => {
+    if (uploadErr) return res.status(400).json({ error: uploadErr.message });
+    const client = requireSocialClient(res);
+    if (!client) return;
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded — attach it under the "file" field.' });
+
+    try {
+      await ensureMediaBucket(client);
+      const brand = (req.body.brand || 'default').replace(/[^a-zA-Z0-9_-]/g, '_') || 'default';
+      const ext = (req.file.originalname.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
+      const path = `${brand}/${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${ext}`;
+
+      const { error: storageError } = await client.storage.from(MEDIA_BUCKET).upload(path, req.file.buffer, {
+        contentType: req.file.mimetype,
+        upsert: false
+      });
+      if (storageError) throw storageError;
+
+      const { data: publicUrlData } = client.storage.from(MEDIA_BUCKET).getPublicUrl(path);
+      res.status(201).json({
+        url: publicUrlData.publicUrl,
+        mediaType: req.file.mimetype.startsWith('video/') ? 'video' : 'image',
+        mimeType: req.file.mimetype
+      });
+    } catch (err) {
+      console.error('[social] Media upload failed:', err.message);
+      res.status(500).json({ error: `Could not upload media: ${err.message}` });
+    }
+  });
 });
 
 protectedRouter.post('/social/posts', async (req, res) => {

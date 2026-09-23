@@ -31,7 +31,8 @@ import {
   CheckCircle2,
   Star,
   Building2,
-  Target
+  Target,
+  LayoutGrid
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -56,7 +57,9 @@ import SocialCalendar from './social/Calendar';
 import ConnectAccounts from './social/ConnectAccounts';
 import Inbox from './social/Inbox';
 import Analytics from './social/Analytics';
+import SocialDashboard from './social/Dashboard';
 import Leads from './leads/Leads';
+import LeadsDashboard from './leads/Dashboard';
 
 const API_BASE = 'http://localhost:5000/api';
 
@@ -355,7 +358,7 @@ function ScoreDistributionChart({ distribution }) {
             </Pie>
             <RTooltip
               formatter={(value, name) => [`${value}%`, name]}
-              contentStyle={{ background: 'var(--bg-surface)', border: 'none', borderRadius: 12, fontSize: 12, boxShadow: '6px 6px 14px rgba(163,177,198,0.5), -6px -6px 14px rgba(255,255,255,0.85)' }}
+              contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12, boxShadow: 'var(--shadow-md)' }}
             />
           </PieChart>
         </ResponsiveContainer>
@@ -406,7 +409,7 @@ function ToolComparisonCharts({ tools }) {
             />
             <RTooltip
               formatter={(value) => [`${value} candidates`, 'Attempts']}
-              contentStyle={{ background: 'var(--bg-surface)', border: 'none', borderRadius: 12, fontSize: 12, boxShadow: '6px 6px 14px rgba(163,177,198,0.5), -6px -6px 14px rgba(255,255,255,0.85)' }}
+              contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12, boxShadow: 'var(--shadow-md)' }}
             />
             <Bar dataKey="totalTestTakers" fill={CHART_COLORS.primary} radius={[0, 4, 4, 0]} barSize={18}>
               <LabelList dataKey="totalTestTakers" position="right" style={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
@@ -433,7 +436,7 @@ function ToolComparisonCharts({ tools }) {
             />
             <RTooltip
               formatter={(value) => [`${value}%`, 'Avg Score']}
-              contentStyle={{ background: 'var(--bg-surface)', border: 'none', borderRadius: 12, fontSize: 12, boxShadow: '6px 6px 14px rgba(163,177,198,0.5), -6px -6px 14px rgba(255,255,255,0.85)' }}
+              contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12, boxShadow: 'var(--shadow-md)' }}
             />
             <Bar dataKey="averageScorePercentage" radius={[0, 4, 4, 0]} barSize={18}>
               {scoreData.map(d => <Cell key={d.id} fill={scoreColor(d.averageScorePercentage)} />)}
@@ -527,7 +530,7 @@ function ToolShareDonut({ tools }) {
             </Pie>
             <RTooltip
               formatter={(value, name) => [`${value} (${total > 0 ? Math.round((value / total) * 100) : 0}%)`, name]}
-              contentStyle={{ background: 'var(--bg-surface)', border: 'none', borderRadius: 12, fontSize: 12, boxShadow: '6px 6px 14px rgba(163,177,198,0.5), -6px -6px 14px rgba(255,255,255,0.85)' }}
+              contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12, boxShadow: 'var(--shadow-md)' }}
             />
           </PieChart>
         </ResponsiveContainer>
@@ -593,7 +596,7 @@ function ScoreDistributionStackedChart({ tools }) {
           <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} />
           <RTooltip
             formatter={(value, name) => [`${value}%`, name]}
-            contentStyle={{ background: 'var(--bg-surface)', border: 'none', borderRadius: 12, fontSize: 12, boxShadow: '6px 6px 14px rgba(163,177,198,0.5), -6px -6px 14px rgba(255,255,255,0.85)' }}
+            contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12, boxShadow: 'var(--shadow-md)' }}
           />
           <Bar dataKey="Low" stackId="s" fill={SCORE_BAND_COLORS.low} barSize={16} radius={[4, 0, 0, 4]} />
           <Bar dataKey="Medium" stackId="s" fill={SCORE_BAND_COLORS.medium} barSize={16} />
@@ -623,7 +626,7 @@ function AvgScoreRadial({ tools }) {
             <RadialBar dataKey="value" background={{ fill: 'var(--bg-surface-hover)' }} cornerRadius={6} />
             <RTooltip
               formatter={(value, name, props) => [`${value}%`, props.payload.name]}
-              contentStyle={{ background: 'var(--bg-surface)', border: 'none', borderRadius: 12, fontSize: 12, boxShadow: '6px 6px 14px rgba(163,177,198,0.5), -6px -6px 14px rgba(255,255,255,0.85)' }}
+              contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12, boxShadow: 'var(--shadow-md)' }}
             />
           </RadialBarChart>
         </ResponsiveContainer>
@@ -966,7 +969,7 @@ function ToolCompositeScoreChart({ tools }) {
           />
           <RTooltip
             formatter={(value, name, props) => [`${value}/100`, (TIER_META[props.payload.tier] || TIER_META.review).label]}
-            contentStyle={{ background: 'var(--bg-surface)', border: 'none', borderRadius: 12, fontSize: 12, boxShadow: '6px 6px 14px rgba(163,177,198,0.5), -6px -6px 14px rgba(255,255,255,0.85)' }}
+            contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12, boxShadow: 'var(--shadow-md)' }}
           />
           <Bar dataKey="performanceScore" radius={[0, 4, 4, 0]} barSize={18}>
             {scored.map(t => <Cell key={t.id} fill={(TIER_META[t.tier] || TIER_META.review).color} />)}
@@ -1011,7 +1014,7 @@ function ToolQualityVsPaymentChart({ tools }) {
           />
           <RTooltip
             formatter={(value, name) => [`${value}%`, name === 'avgScorePercentage' ? 'Avg Score' : 'Payment Conversion']}
-            contentStyle={{ background: 'var(--bg-surface)', border: 'none', borderRadius: 12, fontSize: 12, boxShadow: '6px 6px 14px rgba(163,177,198,0.5), -6px -6px 14px rgba(255,255,255,0.85)' }}
+            contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12, boxShadow: 'var(--shadow-md)' }}
           />
           <Bar dataKey="avgScorePercentage" fill={CATEGORICAL_PALETTE[0]} radius={[0, 4, 4, 0]} barSize={12}>
             <LabelList dataKey="avgScorePercentage" position="right" formatter={(v) => `${v}%`} style={{ fontSize: 10, fill: 'var(--text-secondary)' }} />
@@ -1055,7 +1058,7 @@ function OrgBreadthChart({ data }) {
           />
           <RTooltip
             formatter={(value, name, props) => [`${value} orgs (${props.payload.percentage}%)`, 'Organizations']}
-            contentStyle={{ background: 'var(--bg-surface)', border: 'none', borderRadius: 12, fontSize: 12, boxShadow: '6px 6px 14px rgba(163,177,198,0.5), -6px -6px 14px rgba(255,255,255,0.85)' }}
+            contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12, boxShadow: 'var(--shadow-md)' }}
           />
           <Bar dataKey="orgCount" fill={CHART_COLORS.primary} radius={[0, 4, 4, 0]} barSize={16}>
             <LabelList dataKey="orgCount" position="right" style={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
@@ -1275,7 +1278,8 @@ function App() {
       'Authorization': `Bearer ${token}`
     };
 
-    if (options.body && !headers['Content-Type']) {
+    // FormData sets its own multipart boundary — never force JSON on it.
+    if (options.body && !(options.body instanceof FormData) && !headers['Content-Type']) {
       headers['Content-Type'] = 'application/json';
     }
 
@@ -1841,10 +1845,18 @@ function App() {
           <ul className="menu-list">
             <li className="menu-item">
               <div
+                className={`menu-link ${currentView === 'leads-dashboard' ? 'active' : ''}`}
+                onClick={() => setCurrentView('leads-dashboard')}
+              >
+                <LayoutGrid size={18} /> Dashboard
+              </div>
+            </li>
+            <li className="menu-item">
+              <div
                 className={`menu-link ${currentView === 'leads' ? 'active' : ''}`}
                 onClick={() => setCurrentView('leads')}
               >
-                <Target size={18} /> Leads
+                <Target size={18} /> All Leads
               </div>
             </li>
           </ul>
@@ -3038,11 +3050,13 @@ function App() {
             YouTube + Google Business Profile). Components live under
             src/social/ but render inside this same shell, same as every
             other view above. */}
+        {currentView === 'social-dashboard' && <SocialDashboard authFetch={authFetch} setCurrentView={setCurrentView} />}
         {currentView === 'social-compose' && <Composer authFetch={authFetch} />}
         {currentView === 'social-calendar' && <SocialCalendar authFetch={authFetch} />}
         {currentView === 'social-inbox' && <Inbox authFetch={authFetch} />}
         {currentView === 'social-analytics' && <Analytics authFetch={authFetch} />}
         {currentView === 'social-accounts' && <ConnectAccounts authFetch={authFetch} />}
+        {currentView === 'leads-dashboard' && <LeadsDashboard authFetch={authFetch} setCurrentView={setCurrentView} />}
         {currentView === 'leads' && <Leads authFetch={authFetch} />}
       </main>
 
