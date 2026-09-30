@@ -7,12 +7,35 @@
  */
 
 const express = require('express');
+const ExcelJS = require('exceljs');
 const { getSocialClient } = require('../social/db');
 const { listUsers } = require('../lib/users');
 
 const router = express.Router();
 
 const STATUS_VALUES = ['new', 'contacted', 'qualified', 'proposal', 'won', 'lost'];
+const STATUS_LABEL = {
+  new: 'New', contacted: 'Contacted', qualified: 'Qualified',
+  proposal: 'Proposal', won: 'Won', lost: 'Lost'
+};
+
+// Shared by GET /leads and GET /leads/export so the export always matches
+// whatever the table's own filters are currently showing.
+function applyLeadFilters(query, { status, assignedTo, campaignId, search, startDate, endDate }) {
+  if (status) query = query.eq('status', status);
+  if (assignedTo) query = query.eq('assigned_to', assignedTo);
+  if (campaignId) query = query.eq('campaign_id', campaignId);
+  if (startDate) query = query.gte('created_time', startDate);
+  if (endDate) {
+    // A bare "YYYY-MM-DD" from a <input type=date> means "through the end
+    // of that day" — without this it'd be treated as that day's midnight
+    // and silently drop every lead captured on the end date itself.
+    const inclusiveEnd = /^\d{4}-\d{2}-\d{2}$/.test(endDate) ? `${endDate}T23:59:59.999Z` : endDate;
+    query = query.lte('created_time', inclusiveEnd);
+  }
+  if (search) query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
+  return query;
+}
 
 function requireSocialClient(res) {
   const client = getSocialClient();
@@ -28,15 +51,11 @@ router.get('/leads', async (req, res) => {
   if (!client) return;
 
   try {
-    const { status, assignedTo, campaignId, search, startDate, endDate, limit, offset } = req.query;
-    let query = client.from('leads').select('*', { count: 'exact' }).order('created_time', { ascending: false });
-
-    if (status) query = query.eq('status', status);
-    if (assignedTo) query = query.eq('assigned_to', assignedTo);
-    if (campaignId) query = query.eq('campaign_id', campaignId);
-    if (startDate) query = query.gte('created_time', startDate);
-    if (endDate) query = query.lte('created_time', endDate);
-    if (search) query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
+    const { limit, offset } = req.query;
+    let query = applyLeadFilters(
+      client.from('leads').select('*', { count: 'exact' }).order('created_time', { ascending: false }),
+      req.query
+    );
 
     const pageLimit = Math.min(Number(limit) || 100, 500);
     const pageOffset = Number(offset) || 0;
@@ -63,6 +82,129 @@ router.get('/leads/campaigns', async (req, res) => {
   const seen = new Map();
   for (const row of data || []) seen.set(row.campaign_id, row.campaign_name);
   res.json({ campaigns: Array.from(seen, ([id, name]) => ({ id, name })) });
+});
+
+// Full lead export to .xlsx — same filters as GET /leads (status,
+// assignedTo, campaignId, search, startDate/endDate) but ignores
+// limit/offset and pages through every matching row instead of capping at
+// 500, since an export that silently truncates is worse than a slow one.
+// Every stored column is included, plus one column per distinct
+// Instant-Form question found in field_data (forms vary per campaign, so
+// this is a union across the exported rows, not a fixed list) and the
+// connected Page/brand a lead came in through, so nothing about a lead is
+// left out of the file.
+router.get('/leads/export', async (req, res) => {
+  const client = requireSocialClient(res);
+  if (!client) return;
+
+  try {
+    const PAGE_SIZE = 1000;
+    const rows = [];
+    for (let offset = 0; ; offset += PAGE_SIZE) {
+      let query = applyLeadFilters(
+        client.from('leads').select('*').order('created_time', { ascending: false }),
+        req.query
+      );
+      query = query.range(offset, offset + PAGE_SIZE - 1);
+      const { data, error } = await query;
+      if (error) throw error;
+      rows.push(...(data || []));
+      if (!data || data.length < PAGE_SIZE) break;
+    }
+
+    const userById = new Map(listUsers().map(u => [u.id, u.email]));
+
+    const accountIds = Array.from(new Set(rows.map(r => r.social_account_id).filter(Boolean)));
+    let accountById = new Map();
+    if (accountIds.length > 0) {
+      const { data: accounts } = await client.from('social_accounts').select('id, brand, account_label, platform').in('id', accountIds);
+      accountById = new Map((accounts || []).map(a => [a.id, a]));
+    }
+
+    // Instant Form questions differ per campaign/form, so the export gets
+    // one column per distinct question name actually present, in the
+    // order first seen, rather than guessing a fixed question list.
+    const questionOrder = [];
+    const questionSeen = new Set();
+    for (const row of rows) {
+      for (const f of row.field_data || []) {
+        if (f.name && !questionSeen.has(f.name)) { questionSeen.add(f.name); questionOrder.push(f.name); }
+      }
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Infopace Admin Panel';
+    workbook.created = new Date();
+    const sheet = workbook.addWorksheet('Leads', { views: [{ state: 'frozen', ySplit: 1 }] });
+
+    const baseColumns = [
+      { header: 'Full Name', key: 'full_name', width: 22 },
+      { header: 'Email', key: 'email', width: 26 },
+      { header: 'Phone', key: 'phone', width: 16 },
+      { header: 'Status', key: 'status', width: 12 },
+      { header: 'Assigned To', key: 'assigned_to', width: 24 },
+      { header: 'Notes', key: 'notes', width: 30 },
+      { header: 'Submitted At', key: 'created_time', width: 20, style: { numFmt: 'yyyy-mm-dd hh:mm' } },
+      { header: 'Captured At', key: 'captured_at', width: 20, style: { numFmt: 'yyyy-mm-dd hh:mm' } },
+      { header: 'Brand', key: 'brand', width: 14 },
+      { header: 'Platform', key: 'platform', width: 12 },
+      { header: 'Page / Account', key: 'account_label', width: 24 },
+      { header: 'Campaign Name', key: 'campaign_name', width: 24 },
+      { header: 'Campaign ID', key: 'campaign_id', width: 20 },
+      { header: 'Ad Name', key: 'ad_name', width: 22 },
+      { header: 'Ad ID', key: 'ad_id', width: 20 },
+      { header: 'Adset ID', key: 'adset_id', width: 20 },
+      { header: 'Form Name', key: 'form_name', width: 22 },
+      { header: 'Form ID', key: 'form_id', width: 20 },
+      { header: 'Leadgen ID', key: 'leadgen_id', width: 20 }
+    ];
+    const questionColumns = questionOrder.map((name, i) => ({ header: name, key: `q_${i}`, width: 28 }));
+    sheet.columns = [...baseColumns, ...questionColumns];
+    sheet.getRow(1).font = { bold: true };
+    sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: sheet.columns.length } };
+
+    for (const row of rows) {
+      const account = row.social_account_id ? accountById.get(row.social_account_id) : null;
+      const record = {
+        full_name: row.full_name || '',
+        email: row.email || '',
+        phone: row.phone || '',
+        status: STATUS_LABEL[row.status] || row.status || '',
+        assigned_to: row.assigned_to ? (userById.get(row.assigned_to) || row.assigned_to) : 'Unassigned',
+        notes: row.notes || '',
+        created_time: row.created_time ? new Date(row.created_time) : null,
+        captured_at: row.captured_at ? new Date(row.captured_at) : null,
+        brand: account ? account.brand : '',
+        platform: account ? account.platform : '',
+        account_label: account ? account.account_label : '',
+        campaign_name: row.campaign_name || '',
+        campaign_id: row.campaign_id || '',
+        ad_name: row.ad_name || '',
+        ad_id: row.ad_id || '',
+        adset_id: row.adset_id || '',
+        form_name: row.form_name || '',
+        form_id: row.form_id || '',
+        leadgen_id: row.leadgen_id || ''
+      };
+      questionOrder.forEach((name, i) => {
+        const field = (row.field_data || []).find(f => f.name === name);
+        record[`q_${i}`] = field ? (field.values || []).join(', ') : '';
+      });
+      sheet.addRow(record);
+    }
+
+    const suffix = req.query.startDate || req.query.endDate
+      ? `_${req.query.startDate || 'start'}_to_${req.query.endDate || 'now'}`
+      : '';
+    const filename = `leads_export${suffix}.xlsx`.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Status-pipeline counts + a today/conversion headline — the KPI strip

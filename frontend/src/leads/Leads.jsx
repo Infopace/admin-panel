@@ -1,6 +1,133 @@
-import React, { useEffect, useState } from 'react';
-import { RefreshCw, X, Target, Mail, Phone, Megaphone, Calendar } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { RefreshCw, X, Target, Mail, Phone, Megaphone, Calendar, Download } from 'lucide-react';
 import { LEADS_API_BASE, STATUS_OPTIONS, STATUS_COLOR } from './api';
+
+function isoDate(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+// Date-range popover + the actual export request. Reuses whatever
+// filters (status/campaign/assignee/search) the table is currently
+// showing, so "Export" means "export what's on screen, for this range" —
+// GET /api/leads/export (routes/leads.js) does the real work of paging
+// through every matching row and building the .xlsx server-side.
+function ExportPanel({ authFetch, filters }) {
+  const [open, setOpen] = useState(false);
+  const [range, setRange] = useState({ startDate: '', endDate: '' });
+  const [quick, setQuick] = useState('all');
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState(null);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const setQuickRange = (key, days) => {
+    setQuick(key);
+    if (days === null) {
+      setRange({ startDate: '', endDate: '' });
+      return;
+    }
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - days + 1);
+    setRange({ startDate: isoDate(start), endDate: isoDate(end) });
+  };
+
+  const runExport = async () => {
+    setExporting(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v); });
+      if (range.startDate) params.set('startDate', range.startDate);
+      if (range.endDate) params.set('endDate', range.endDate);
+
+      const res = await authFetch(`${LEADS_API_BASE}/export?${params.toString()}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Could not export leads.');
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="?([^";]+)"?/);
+      const filename = match ? match[1] : 'leads_export.xlsx';
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setOpen(false);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'relative' }} ref={wrapRef}>
+      <button className="btn btn-secondary btn-sm" onClick={() => setOpen(o => !o)}>
+        <Download size={14} /> Export
+      </button>
+      {open && (
+        <div className="export-popover">
+          <div className="export-popover-title">Export leads to Excel</div>
+
+          <div className="export-popover-quick">
+            <button type="button" className={quick === '7' ? 'active' : ''} onClick={() => setQuickRange('7', 7)}>Last 7 days</button>
+            <button type="button" className={quick === '30' ? 'active' : ''} onClick={() => setQuickRange('30', 30)}>Last 30 days</button>
+            <button type="button" className={quick === 'all' ? 'active' : ''} onClick={() => setQuickRange('all', null)}>All time</button>
+          </div>
+
+          <label className="export-popover-label">From</label>
+          <input
+            type="date"
+            className="form-control"
+            style={{ width: '100%' }}
+            value={range.startDate}
+            onChange={(e) => { setQuick('custom'); setRange(r => ({ ...r, startDate: e.target.value })); }}
+          />
+          <label className="export-popover-label">To</label>
+          <input
+            type="date"
+            className="form-control"
+            style={{ width: '100%' }}
+            value={range.endDate}
+            onChange={(e) => { setQuick('custom'); setRange(r => ({ ...r, endDate: e.target.value })); }}
+          />
+
+          {error && <p style={{ color: 'var(--accent-danger)', fontSize: '0.78rem', marginTop: '0.6rem' }}>{error}</p>}
+
+          <button
+            className="btn btn-primary btn-sm"
+            style={{ width: '100%', justifyContent: 'center', marginTop: '0.85rem' }}
+            disabled={exporting}
+            onClick={runExport}
+          >
+            <Download size={14} /> {exporting ? 'Exporting…' : 'Export to Excel'}
+          </button>
+          <div className="export-popover-hint">
+            Leaving From/To blank exports all time. Any status, campaign, assignee or search filter applied to the table below is included too.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Meta Lead Ads capture — backend/leads/poller.js pulls new Instant Form
 // leads every 5 min into the `leads` table; this page reads/updates them.
@@ -86,9 +213,12 @@ function Leads({ authFetch }) {
           <h1>Leads</h1>
           <p>Instant Form leads captured from Meta (Facebook/Instagram) campaigns, synced every 5 minutes.</p>
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={load}>
-          <RefreshCw size={14} /> Refresh
-        </button>
+        <div style={{ display: 'flex', gap: '0.6rem' }}>
+          <ExportPanel authFetch={authFetch} filters={filters} />
+          <button className="btn btn-secondary btn-sm" onClick={load}>
+            <RefreshCw size={14} /> Refresh
+          </button>
+        </div>
       </div>
 
       {error && <p style={{ color: 'var(--accent-danger)', marginBottom: '1rem' }}>{error}</p>}

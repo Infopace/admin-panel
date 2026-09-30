@@ -498,6 +498,72 @@ body {
   gap: 1rem;
 }
 
+/* Export-to-Excel date-range popover (Leads page). Anchored to its
+   trigger button via a position:relative wrapper in the JSX. */
+.export-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 260px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 1rem;
+  z-index: 20;
+}
+
+.export-popover-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+
+.export-popover-quick {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.export-popover-quick button {
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.export-popover-quick button:hover,
+.export-popover-quick button.active {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.export-popover-label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  margin-bottom: 0.3rem;
+}
+
+.export-popover-label:not(:first-of-type) {
+  margin-top: 0.65rem;
+}
+
+.export-popover-hint {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+  line-height: 1.4;
+}
+
 .search-bar {
   display: flex;
   align-items: center;
