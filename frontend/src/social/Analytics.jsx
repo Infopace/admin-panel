@@ -7,6 +7,7 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, Cell, LabelList
 } from 'recharts';
 import { SOCIAL_API_BASE, PLATFORM_LABELS, PLATFORM_COLORS } from './api';
+import { PlatformIcon } from './PlatformIcon';
 
 // "Brand Health" — redesigned as a channel-card grid (one card per
 // connected account) instead of a plain table, plus an engagement
@@ -48,8 +49,8 @@ function ChannelCard({ row, expanded, onToggle }) {
   return (
     <div className="panel" style={{ marginBottom: 0, border: expanded ? `1px solid ${color}` : undefined }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1rem' }}>
-        <div style={{ width: 38, height: 38, borderRadius: 'var(--radius-sm)', background: color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.9rem', flexShrink: 0 }}>
-          {(PLATFORM_LABELS[row.platform] || row.platform || '?')[0].toUpperCase()}
+        <div style={{ width: 38, height: 38, borderRadius: 'var(--radius-sm)', background: color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <PlatformIcon platform={row.platform} size={18} />
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.accountLabel || row.accountId}</div>

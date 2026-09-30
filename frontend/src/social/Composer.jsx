@@ -5,7 +5,7 @@ import {
   PlayCircle, Image as ImageIcon
 } from 'lucide-react';
 import { SOCIAL_API_BASE, PLATFORM_LABELS, PLATFORM_COLORS } from './api';
-import { PlatformIconButton } from './PlatformIcon';
+import { PlatformIcon, PlatformIconButton } from './PlatformIcon';
 
 // Per-platform limits this composer actually warns about — kept to what
 // the connected adapters really enforce, not a guessed list for
@@ -19,12 +19,6 @@ const CHAR_LIMITS = {
 };
 
 let mediaItemSeq = 0;
-
-function initials(name) {
-  if (!name) return '?';
-  const parts = name.trim().split(/\s+/);
-  return parts.slice(0, 2).map(p => p[0]).join('').toUpperCase();
-}
 
 // Collapses long preview text to 5 lines with a working "...more" toggle —
 // same idea as the real feed UIs this is mimicking, not just decoration.
@@ -63,7 +57,7 @@ function LinkedInPreview({ accountLabel, content, media, timestampLabel }) {
   return (
     <div className="preview-card">
       <div className="preview-header">
-        <div className="preview-avatar" style={{ background: PLATFORM_COLORS.linkedin }}>{initials(accountLabel)}</div>
+        <div className="preview-avatar" style={{ background: PLATFORM_COLORS.linkedin }}><PlatformIcon platform="linkedin" size={16} /></div>
         <div>
           <div className="preview-name">{accountLabel || 'Your LinkedIn Page'}</div>
           <div className="preview-meta">{timestampLabel} · <Globe size={11} /></div>
@@ -85,7 +79,7 @@ function FacebookPreview({ accountLabel, content, media, timestampLabel }) {
   return (
     <div className="preview-card">
       <div className="preview-header">
-        <div className="preview-avatar" style={{ background: PLATFORM_COLORS.facebook }}>{initials(accountLabel)}</div>
+        <div className="preview-avatar" style={{ background: PLATFORM_COLORS.facebook }}><PlatformIcon platform="facebook" size={16} /></div>
         <div>
           <div className="preview-name">{accountLabel || 'Your Facebook Page'}</div>
           <div className="preview-meta">{timestampLabel} · <Globe size={11} /></div>
@@ -106,7 +100,7 @@ function InstagramPreview({ accountLabel, content, media }) {
   return (
     <div className="preview-card">
       <div className="preview-header">
-        <div className="preview-avatar" style={{ background: PLATFORM_COLORS.instagram }}>{initials(accountLabel)}</div>
+        <div className="preview-avatar" style={{ background: PLATFORM_COLORS.instagram }}><PlatformIcon platform="instagram" size={16} /></div>
         <div className="preview-name">{accountLabel || 'your_page'}</div>
       </div>
       <PreviewMedia media={media} square placeholder="Instagram requires a photo or video" />
@@ -136,7 +130,7 @@ function YouTubePreview({ accountLabel, content, media, timestampLabel }) {
         <div className="preview-play-overlay"><PlayCircle size={44} color="#fff" fill="rgba(0,0,0,0.4)" /></div>
       </div>
       <div className="preview-header" style={{ alignItems: 'flex-start' }}>
-        <div className="preview-avatar" style={{ background: PLATFORM_COLORS.youtube }}>{initials(accountLabel)}</div>
+        <div className="preview-avatar" style={{ background: PLATFORM_COLORS.youtube }}><PlatformIcon platform="youtube" size={16} /></div>
         <div>
           <div className="preview-name" style={{ WebkitLineClamp: 2, display: '-webkit-box', WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{title}</div>
           <div className="preview-meta">{accountLabel || 'Your Channel'} · {timestampLabel}</div>
@@ -151,7 +145,7 @@ function GoogleBusinessPreview({ accountLabel, content, media, timestampLabel })
     <div className="preview-card">
       <PreviewMedia media={media} placeholder="Add a photo (optional)" />
       <div className="preview-header">
-        <div className="preview-avatar" style={{ background: PLATFORM_COLORS.google_business }}>{initials(accountLabel)}</div>
+        <div className="preview-avatar" style={{ background: PLATFORM_COLORS.google_business }}><PlatformIcon platform="google_business" size={16} /></div>
         <div>
           <div className="preview-name">{accountLabel || 'Your Business'}</div>
           <div className="preview-meta">Local Post · {timestampLabel}</div>
@@ -349,7 +343,7 @@ function Composer({ authFetch }) {
                   >
                     <div className="account-chip-avatar-wrap">
                       <div className="account-chip-avatar" style={{ background: PLATFORM_COLORS[a.platform] || 'var(--text-muted)' }}>
-                        {initials(a.account_label || a.platform)}
+                        <PlatformIcon platform={a.platform} size={18} />
                       </div>
                       {selected && <span className="account-chip-check"><Check size={10} /></span>}
                     </div>
