@@ -60,7 +60,7 @@ export function PlatformIcon({ platform, size = 18 }) {
 // and fill sweep — same visual language as the Uiverse.io reference this
 // was adapted from, minus the raw <ul>/<a> markup so it drops into a React
 // filter toolbar instead of a standalone social-link widget.
-export function PlatformIconButton({ platform, active, onClick, size = 18 }) {
+export function PlatformIconButton({ platform, active, onClick, size = 20 }) {
   const brand = PLATFORM_COLORS[platform] || '#5b6478';
   const style = {
     '--brand': brand,

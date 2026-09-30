@@ -161,7 +161,7 @@ function Posts({ authFetch, setCurrentView }) {
 
       <div className="platform-tabs">
         <PlatformFilterTabs platforms={AVAILABLE_PLATFORMS} value={platformFilter} onChange={setPlatformFilter} />
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.75rem' }}>
           <div className="search-bar" style={{ width: 200 }}>
             <Search size={14} style={{ color: 'var(--text-muted)' }} />
             <input placeholder="Search post content…" value={search} onChange={(e) => setSearch(e.target.value)} />
