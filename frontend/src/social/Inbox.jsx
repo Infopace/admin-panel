@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { RefreshCw, AtSign, MessageSquare, ExternalLink } from 'lucide-react';
 import { SOCIAL_API_BASE, PLATFORM_LABELS, PLATFORM_COLORS, AVAILABLE_PLATFORMS } from './api';
+import { PlatformFilterTabs } from './PlatformIcon';
 
 // Unified "all queries and leads in one place" view — mentions (comments,
 // reviews) and inbox_messages (DMs) merged server-side into one list by
@@ -103,15 +104,7 @@ function Inbox({ authFetch }) {
       {error && <p style={{ color: 'var(--accent-danger)', marginBottom: '1rem' }}>{error}</p>}
 
       <div className="platform-tabs">
-        <div className={`platform-tab ${filters.platform === '' ? 'active' : ''}`} onClick={() => setFilter('platform', '')}>
-          All
-        </div>
-        {AVAILABLE_PLATFORMS.map(p => (
-          <div key={p} className={`platform-tab ${filters.platform === p ? 'active' : ''}`} onClick={() => setFilter('platform', p)}>
-            <span className="dot" style={{ background: filters.platform === p ? '#fff' : (PLATFORM_COLORS[p] || 'var(--text-muted)') }} />
-            {PLATFORM_LABELS[p]}
-          </div>
-        ))}
+        <PlatformFilterTabs platforms={AVAILABLE_PLATFORMS} value={filters.platform} onChange={(p) => setFilter('platform', p)} />
       </div>
 
       <div className="table-section">

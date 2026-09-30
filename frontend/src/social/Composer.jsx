@@ -5,6 +5,7 @@ import {
   PlayCircle, Image as ImageIcon
 } from 'lucide-react';
 import { SOCIAL_API_BASE, PLATFORM_LABELS, PLATFORM_COLORS } from './api';
+import { PlatformIconButton } from './PlatformIcon';
 
 // Per-platform limits this composer actually warns about — kept to what
 // the connected adapters really enforce, not a guessed list for
@@ -503,12 +504,9 @@ function Composer({ authFetch }) {
               ) : (
                 <>
                   {selectedPlatforms.length > 1 && (
-                    <div className="preview-tabs">
+                    <div className="preview-tabs platform-icon-tabs">
                       {selectedPlatforms.map(p => (
-                        <div key={p} className={`platform-tab ${previewPlatform === p ? 'active' : ''}`} onClick={() => setPreviewPlatform(p)}>
-                          <span className="dot" style={{ background: previewPlatform === p ? '#fff' : (PLATFORM_COLORS[p] || 'var(--text-muted)') }} />
-                          {PLATFORM_LABELS[p]}
-                        </div>
+                        <PlatformIconButton key={p} platform={p} active={previewPlatform === p} onClick={() => setPreviewPlatform(p)} />
                       ))}
                     </div>
                   )}

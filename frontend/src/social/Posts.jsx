@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { RefreshCw, X, Calendar as CalendarIcon, ChevronDown, ChevronUp, PenSquare, Search } from 'lucide-react';
 import { SOCIAL_API_BASE, PLATFORM_LABELS, PLATFORM_COLORS, AVAILABLE_PLATFORMS } from './api';
+import { PlatformIcon, PlatformFilterTabs } from './PlatformIcon';
 
 // Renamed from "Calendar" — Zoho/HubSpot both call this section "Posts"
 // with Scheduled/Published as its two sub-views (Zoho's Posts nav has
@@ -23,10 +24,6 @@ const SUB_TABS = [
   { key: 'scheduled', label: 'Scheduled', statuses: ['pending', 'publishing'] },
   { key: 'published', label: 'Published', statuses: ['published', 'failed'] }
 ];
-
-function platformInitial(p) {
-  return (PLATFORM_LABELS[p] || p || '?')[0].toUpperCase();
-}
 
 function groupByDate(posts) {
   const groups = {};
@@ -163,15 +160,7 @@ function Posts({ authFetch, setCurrentView }) {
       </div>
 
       <div className="platform-tabs">
-        <div className={`platform-tab ${platformFilter === '' ? 'active' : ''}`} onClick={() => setPlatformFilter('')}>
-          All
-        </div>
-        {AVAILABLE_PLATFORMS.map(p => (
-          <div key={p} className={`platform-tab ${platformFilter === p ? 'active' : ''}`} onClick={() => setPlatformFilter(p)}>
-            <span className="dot" style={{ background: platformFilter === p ? '#fff' : (PLATFORM_COLORS[p] || 'var(--text-muted)') }} />
-            {PLATFORM_LABELS[p]}
-          </div>
-        ))}
+        <PlatformFilterTabs platforms={AVAILABLE_PLATFORMS} value={platformFilter} onChange={setPlatformFilter} />
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
           <div className="search-bar" style={{ width: 200 }}>
             <Search size={14} style={{ color: 'var(--text-muted)' }} />
@@ -216,7 +205,7 @@ function Posts({ authFetch, setCurrentView }) {
                         <div className="post-platform-chips">
                           {(post.target_platforms || []).map(p => (
                             <div key={p} className="post-platform-chip" style={{ background: PLATFORM_COLORS[p] || 'var(--text-muted)' }} title={PLATFORM_LABELS[p] || p}>
-                              {platformInitial(p)}
+                              <PlatformIcon platform={p} size={12} />
                             </div>
                           ))}
                         </div>
