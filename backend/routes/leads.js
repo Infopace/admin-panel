@@ -88,11 +88,13 @@ router.get('/leads/campaigns', async (req, res) => {
 // assignedTo, campaignId, search, startDate/endDate) but ignores
 // limit/offset and pages through every matching row instead of capping at
 // 500, since an export that silently truncates is worse than a slow one.
-// Every stored column is included, plus one column per distinct
-// Instant-Form question found in field_data (forms vary per campaign, so
-// this is a union across the exported rows, not a fixed list) and the
-// connected Page/brand a lead came in through, so nothing about a lead is
-// left out of the file.
+// Contact/pipeline info, the connected Page/brand, and Campaign Name are
+// included, plus one column per distinct Instant-Form question found in
+// field_data (forms vary per campaign, so this is a union across the
+// exported rows, not a fixed list) — that's the actual "form" content.
+// Meta's own ad-tech bookkeeping IDs/names (campaign/ad/adset/form IDs,
+// ad name, form name, the Meta leadgen ID) are deliberately left out —
+// they're not useful for lead follow-up and just clutter the sheet.
 router.get('/leads/export', async (req, res) => {
   const client = requireSocialClient(res);
   if (!client) return;
@@ -149,14 +151,7 @@ router.get('/leads/export', async (req, res) => {
       { header: 'Brand', key: 'brand', width: 14 },
       { header: 'Platform', key: 'platform', width: 12 },
       { header: 'Page / Account', key: 'account_label', width: 24 },
-      { header: 'Campaign Name', key: 'campaign_name', width: 24 },
-      { header: 'Campaign ID', key: 'campaign_id', width: 20 },
-      { header: 'Ad Name', key: 'ad_name', width: 22 },
-      { header: 'Ad ID', key: 'ad_id', width: 20 },
-      { header: 'Adset ID', key: 'adset_id', width: 20 },
-      { header: 'Form Name', key: 'form_name', width: 22 },
-      { header: 'Form ID', key: 'form_id', width: 20 },
-      { header: 'Leadgen ID', key: 'leadgen_id', width: 20 }
+      { header: 'Campaign Name', key: 'campaign_name', width: 24 }
     ];
     const questionColumns = questionOrder.map((name, i) => ({ header: name, key: `q_${i}`, width: 28 }));
     sheet.columns = [...baseColumns, ...questionColumns];
@@ -177,14 +172,7 @@ router.get('/leads/export', async (req, res) => {
         brand: account ? account.brand : '',
         platform: account ? account.platform : '',
         account_label: account ? account.account_label : '',
-        campaign_name: row.campaign_name || '',
-        campaign_id: row.campaign_id || '',
-        ad_name: row.ad_name || '',
-        ad_id: row.ad_id || '',
-        adset_id: row.adset_id || '',
-        form_name: row.form_name || '',
-        form_id: row.form_id || '',
-        leadgen_id: row.leadgen_id || ''
+        campaign_name: row.campaign_name || ''
       };
       questionOrder.forEach((name, i) => {
         const field = (row.field_data || []).find(f => f.name === name);
