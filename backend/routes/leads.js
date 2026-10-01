@@ -204,8 +204,15 @@ router.get('/leads/summary', async (req, res) => {
   if (!client) return;
 
   try {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    // "Today" means the IST calendar day, regardless of the server's own
+    // timezone (production runs in UTC) — otherwise this boundary drifts
+    // by up to 5.5 hours from what the IST-based admin UI calls "today".
+    // Computed with UTC getters/Date.UTC throughout so it never depends on
+    // the server process's own TZ setting.
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+    const istWallClock = new Date(Date.now() + IST_OFFSET_MS);
+    const istMidnightWallMs = Date.UTC(istWallClock.getUTCFullYear(), istWallClock.getUTCMonth(), istWallClock.getUTCDate());
+    const todayStart = new Date(istMidnightWallMs - IST_OFFSET_MS);
 
     const [totalResult, todayResult, ...statusResults] = await Promise.all([
       client.from('leads').select('id', { count: 'exact', head: true }),
@@ -253,11 +260,12 @@ router.patch('/leads/:id', async (req, res) => {
   res.json({ lead: data });
 });
 
-// Reuses the same admin-accounts roster as the Inbox's assignee dropdown
-// (routes/social.js's GET /social/team) — this repo's own login users,
-// not a separate team table.
+// Reuses the same login-accounts roster as the Inbox's assignee dropdown
+// (routes/social.js's GET /social/team), narrowed to the finance team —
+// they're the only role that can open the Sales module, so assigning a
+// lead to anyone else would hand it to someone who can't see it.
 router.get('/leads/team', (req, res) => {
-  res.json({ users: listUsers() });
+  res.json({ users: listUsers().filter(u => u.role === 'finance') });
 });
 
 module.exports = router;

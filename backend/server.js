@@ -250,14 +250,15 @@ app.post('/api/auth/register', (req, res) => {
     id: Date.now().toString(),
     email: email.toLowerCase(),
     password: hashedPassword,
+    role: 'admin',
     createdAt: new Date().toISOString()
   };
 
   users.push(newUser);
   writeUsers(users);
 
-  const token = jwt.sign({ id: newUser.id, email: newUser.email }, JWT_SECRET, { expiresIn: '24h' });
-  res.status(201).json({ success: true, token, email: newUser.email });
+  const token = jwt.sign({ id: newUser.id, email: newUser.email, role: newUser.role }, JWT_SECRET, { expiresIn: '24h' });
+  res.status(201).json({ success: true, token, email: newUser.email, role: newUser.role });
 });
 
 app.post('/api/auth/login', (req, res) => {
@@ -272,8 +273,8 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(401).json({ error: 'Invalid email or password.' });
   }
 
-  const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '24h' });
-  res.json({ success: true, token, email: user.email });
+  const token = jwt.sign({ id: user.id, email: user.email, role: user.role || 'admin' }, JWT_SECRET, { expiresIn: '24h' });
+  res.json({ success: true, token, email: user.email, role: user.role || 'admin' });
 });
 
 // Social OAuth callback (unprotected) — the OAuth provider redirects the
@@ -285,11 +286,60 @@ app.use('/api', socialRoutes.publicRouter);
 // Protect all subsequent endpoints
 app.use(authenticateToken);
 
+// Current role for the logged-in user, read fresh from users.json on every
+// request rather than trusted from the JWT — so changing someone's role
+// (scripts/set-user-role.js) takes effect immediately instead of after their
+// 24h token expires. Accounts created before roles existed have no `role`
+// field and count as 'admin'.
+function currentUserRole(req) {
+  const user = req.user && readUsers().find(u => u.id === req.user.id);
+  return user ? (user.role || 'admin') : null;
+}
+
+// Role gate. Responds 403 with code FORBIDDEN_ROLE (not a bare 403) so the
+// frontend can tell "not allowed here" apart from "token invalid", which
+// authenticateToken also answers with 403 and which does mean log out.
+function requireRole(...allowedRoles) {
+  return (req, res, next) => {
+    if (!allowedRoles.includes(currentUserRole(req))) {
+      return res.status(403).json({ error: 'You do not have permission to access this resource.', code: 'FORBIDDEN_ROLE' });
+    }
+    next();
+  };
+}
+
+// Finance is a Sales-only role: it can reach the leads endpoints and the
+// /auth/me role check, and nothing else — no Overview/Analytics/Social/
+// Settings/candidate data. Mounted on '/api' (before the social router,
+// before leads, before every other endpoint below) so it's the first
+// thing every request hits after authentication. Every other role
+// (currently just 'admin') is unaffected by this gate; the separate
+// requireRole('finance') below keeps admins out of /api/leads the same
+// way this keeps finance out of everything else.
+function restrictFinanceToSalesOnly(req, res, next) {
+  if (currentUserRole(req) === 'finance' && req.path !== '/auth/me' && !req.path.startsWith('/leads')) {
+    return res.status(403).json({ error: 'Finance accounts can only access the Sales module.', code: 'FORBIDDEN_ROLE' });
+  }
+  next();
+}
+app.use('/api', restrictFinanceToSalesOnly);
+
+app.get('/api/auth/me', (req, res) => {
+  const role = currentUserRole(req);
+  if (!role) return res.status(401).json({ error: 'Account no longer exists.' });
+  res.json({ email: req.user.email, role });
+});
+
 // Social module routes (protected) — accounts, connect, posts, mentions,
 // inbox, analytics. See routes/social.js.
 app.use('/api', socialRoutes.protectedRouter);
 
-// Leads routes (protected) — see routes/leads.js.
+// Leads routes (protected) — see routes/leads.js. The Sales module is
+// finance-team only. The gate is mounted on /api/leads specifically:
+// mounting it on /api alongside the router would run it for every /api
+// request that reaches this point and lock non-finance users out of all
+// the routes below.
+app.use('/api/leads', requireRole('finance'));
 app.use('/api', leadsRoutes);
 
 // Get dashboard configuration and connection status

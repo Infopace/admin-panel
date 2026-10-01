@@ -6,6 +6,14 @@ function isoDate(d) {
   return d.toISOString().slice(0, 10);
 }
 
+// Leads come from Meta's Graph API with a UTC timestamp; force IST here so
+// the captured time reads the same for every viewer regardless of their
+// machine's local timezone, instead of silently depending on it.
+const IST_TZ = 'Asia/Kolkata';
+function formatIST(dateStr, options) {
+  return new Date(dateStr).toLocaleString('en-IN', { timeZone: IST_TZ, ...options });
+}
+
 // Date-range popover + the actual export request. Reuses whatever
 // filters (status/campaign/assignee/search) the table is currently
 // showing, so "Export" means "export what's on screen, for this range" —
@@ -295,8 +303,8 @@ function Leads({ authFetch }) {
                 leads.map(lead => (
                   <tr key={lead.id} onClick={() => openDrawer(lead)}>
                     <td style={{ whiteSpace: 'nowrap', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
-                      {lead.created_time ? new Date(lead.created_time).toLocaleDateString() : '—'}<br />
-                      {lead.created_time ? new Date(lead.created_time).toLocaleTimeString() : ''}
+                      {lead.created_time ? formatIST(lead.created_time, { year: 'numeric', month: 'numeric', day: 'numeric' }) : '—'}<br />
+                      {lead.created_time ? formatIST(lead.created_time, { hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: true }) : ''}
                     </td>
                     <td style={{ minWidth: 220 }}>
                       <div style={{ fontWeight: 600 }}>{lead.full_name || 'Unnamed lead'}</div>
@@ -359,7 +367,7 @@ function Leads({ authFetch }) {
                 <h2>{selectedLead.full_name || 'Unnamed lead'}</h2>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   <Calendar size={13} />
-                  {selectedLead.created_time ? new Date(selectedLead.created_time).toLocaleString() : 'Capture date unknown'}
+                  {selectedLead.created_time ? formatIST(selectedLead.created_time, { dateStyle: 'medium', timeStyle: 'medium' }) : 'Capture date unknown'}
                 </div>
               </div>
               <button className="close-btn" onClick={closeDrawer}><X size={22} /></button>

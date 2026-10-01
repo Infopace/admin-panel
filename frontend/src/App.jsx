@@ -1181,6 +1181,15 @@ function App() {
   // Authentication State
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [userEmail, setUserEmail] = useState(localStorage.getItem('userEmail') || '');
+  // 'admin' or 'finance'. Finance is a Sales-only role: canViewSales also
+  // doubles as "hide everything that isn't Sales" below, since finance is
+  // the only role Sales is scoped to. This only gates what the sidebar
+  // offers and what gets fetched — the backend enforces the same split on
+  // its own (restrictFinanceToSalesOnly in server.js), and the role is
+  // re-asked via /auth/me on load so a change takes effect without a
+  // re-login.
+  const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || 'admin');
+  const canViewSales = userRole === 'finance';
   const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
   const [authForm, setAuthForm] = useState({ email: '', password: '' });
   const [authError, setAuthError] = useState('');
@@ -1266,8 +1275,10 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('userEmail');
+    localStorage.removeItem('userRole');
     setToken('');
     setUserEmail('');
+    setUserRole('admin');
     setCurrentView('overview');
   };
 
@@ -1285,7 +1296,11 @@ function App() {
 
     try {
       const res = await fetch(url, { ...options, headers });
-      if (res.status === 401 || res.status === 403) {
+      // A FORBIDDEN_ROLE 403 means "your role can't open this", not "your
+      // session is bad" — leave the user logged in and let the caller
+      // show the error.
+      const roleDenied = res.status === 403 && (await res.clone().json().catch(() => ({}))).code === 'FORBIDDEN_ROLE';
+      if (res.status === 401 || (res.status === 403 && !roleDenied)) {
         handleLogout();
         throw new Error('Session expired or unauthorized. Please log in again.');
       }
@@ -1335,8 +1350,10 @@ function App() {
       } else {
         localStorage.setItem('token', data.token);
         localStorage.setItem('userEmail', data.email);
+        localStorage.setItem('userRole', data.role || 'admin');
         setToken(data.token);
         setUserEmail(data.email);
+        setUserRole(data.role || 'admin');
         setAuthForm({ email: '', password: '' });
       }
     } catch (err) {
@@ -1347,9 +1364,12 @@ function App() {
   };
 
   // 1. Initial Load: Fetch API Status and Overview (used by sidebar nav
-  // and the Overview landing page)
+  // and the Overview landing page). Finance can't reach any of this on
+  // the backend (restrictFinanceToSalesOnly) and never sees it in the
+  // sidebar, so skip the calls entirely rather than surface them as a
+  // backend-error banner.
   const loadInitialData = async () => {
-    if (!token) return;
+    if (!token || canViewSales) return;
     setLoading(true);
     setBackendError(false);
     try {
@@ -1376,10 +1396,37 @@ function App() {
   };
 
   useEffect(() => {
-    if (token) {
+    if (token && !canViewSales) {
       loadInitialData();
     }
+  }, [token, canViewSales]);
+
+  // Re-check the role with the backend rather than trusting what login
+  // stored in localStorage — picks up a role change made since then.
+  useEffect(() => {
+    if (!token) return;
+    authFetch(`${API_BASE}/auth/me`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(me => {
+        if (!me) return;
+        localStorage.setItem('userRole', me.role);
+        setUserRole(me.role);
+      })
+      .catch(() => {});
   }, [token]);
+
+  // Finance is Sales-only: bounce it onto a Sales view if it somehow isn't
+  // on one (first login, a stale view from before a demotion/promotion).
+  // Everyone else is bounced the other way, off a Sales view they no
+  // longer have (demoted away from finance).
+  useEffect(() => {
+    const onSalesView = currentView === 'leads' || currentView === 'leads-dashboard';
+    if (canViewSales && !onSalesView) {
+      setCurrentView('leads-dashboard');
+    } else if (!canViewSales && onSalesView) {
+      setCurrentView('overview');
+    }
+  }, [canViewSales, currentView]);
 
   // Analytics — cross-tool signals (health, alerts, report monitoring)
   // fetched whenever Analytics OR the Overview dashboard is open — Overview
@@ -1792,6 +1839,11 @@ function App() {
           <span className="logo-text" style={{ fontSize: '1.15rem' }}>Admin Panel</span>
         </div>
 
+        {/* Finance is Sales-only (see canViewSales above) — none of this,
+            nor Social, nor Tool Categories below, is reachable on the
+            backend for that role, so there's nothing for it to click into
+            here either. */}
+        {!canViewSales && (
         <div className="menu-section">
           <div className="menu-title">Main Dashboard</div>
           <ul className="menu-list">
@@ -1837,9 +1889,11 @@ function App() {
             </li>
           </ul>
         </div>
+        )}
 
-        <SocialNav currentView={currentView} setCurrentView={setCurrentView} />
+        {!canViewSales && <SocialNav currentView={currentView} setCurrentView={setCurrentView} />}
 
+        {canViewSales && (
         <div className="menu-section">
           <div className="menu-title">Sales</div>
           <ul className="menu-list">
@@ -1861,6 +1915,7 @@ function App() {
             </li>
           </ul>
         </div>
+        )}
 
         {/* Category accordion — collapsed by default, showing just the
             category name. Clicking a category toggles it open/closed in
@@ -1869,6 +1924,7 @@ function App() {
             view, same as before. Categories are derived from each
             adapter's metadata.category, so a new one like "Psychometric"
             appears here automatically the moment a tool declares it. */}
+        {!canViewSales && (
         <div className="menu-section">
           <div className="menu-title">Tool Categories</div>
           <ul className="menu-list">
@@ -1908,6 +1964,7 @@ function App() {
             })}
           </ul>
         </div>
+        )}
 
         {/* User profile & Logout */}
         <div className="sidebar-user-profile">
@@ -3056,8 +3113,8 @@ function App() {
         {currentView === 'social-inbox' && <Inbox authFetch={authFetch} />}
         {currentView === 'social-analytics' && <Analytics authFetch={authFetch} />}
         {currentView === 'social-accounts' && <ConnectAccounts authFetch={authFetch} />}
-        {currentView === 'leads-dashboard' && <LeadsDashboard authFetch={authFetch} setCurrentView={setCurrentView} />}
-        {currentView === 'leads' && <Leads authFetch={authFetch} />}
+        {canViewSales && currentView === 'leads-dashboard' && <LeadsDashboard authFetch={authFetch} setCurrentView={setCurrentView} />}
+        {canViewSales && currentView === 'leads' && <Leads authFetch={authFetch} />}
       </main>
 
       {/* CANDIDATE DETAILS DRAWER SLIDE-OUT */}

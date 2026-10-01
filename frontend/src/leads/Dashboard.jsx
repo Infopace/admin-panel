@@ -61,10 +61,11 @@ function KpiTile({ icon: Icon, color, label, value, sub }) {
   );
 }
 
-// "YYYY-MM-DD" in local time, for grouping/bucketing by calendar day.
+// "YYYY-MM-DD" in IST, for grouping/bucketing by calendar day — pinned to
+// IST (rather than the viewer's local time) so the trend lines up with the
+// IST "today" boundary the /leads/summary KPI tile uses.
 function dayKey(iso) {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 }
 
 function formatShortDate(key) {
@@ -338,7 +339,7 @@ function Dashboard({ authFetch, setCurrentView }) {
                 {recentLeads.map(lead => (
                   <tr key={lead.id}>
                     <td style={{ color: 'var(--text-secondary)' }}>
-                      {lead.created_time ? new Date(lead.created_time).toLocaleDateString() : '—'}
+                      {lead.created_time ? new Date(lead.created_time).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }) : '—'}
                     </td>
                     <td>
                       <div style={{ fontWeight: 600 }}>{lead.full_name || 'Unnamed lead'}</div>

@@ -15,7 +15,7 @@ const USERS_FILE = path.join(__dirname, '..', 'data', 'users.json');
 function listUsers() {
   try {
     const data = fs.readFileSync(USERS_FILE, 'utf8');
-    return JSON.parse(data).map(u => ({ id: u.id, email: u.email }));
+    return JSON.parse(data).map(u => ({ id: u.id, email: u.email, role: u.role || 'admin' }));
   } catch (err) {
     return [];
   }
