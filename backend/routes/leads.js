@@ -219,7 +219,12 @@ router.get('/leads/summary', async (req, res) => {
 
     const [totalResult, todayResult, ...statusResults] = await Promise.all([
       client.from('leads').select('id', { count: 'exact', head: true }),
-      client.from('leads').select('id', { count: 'exact', head: true }).gte('captured_at', todayStart.toISOString()),
+      // created_time (when the person actually submitted the form), NOT
+      // captured_at (when the poller happened to insert the row). A
+      // backfill — e.g. the catch-up sweep after reconnecting an account —
+      // writes hundreds of rows in one minute, and counting those as
+      // "new today" overstates the day by the entire backlog.
+      client.from('leads').select('id', { count: 'exact', head: true }).gte('created_time', todayStart.toISOString()),
       ...STATUS_VALUES.map(status => client.from('leads').select('id', { count: 'exact', head: true }).eq('status', status))
     ]);
 

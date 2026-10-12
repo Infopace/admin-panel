@@ -144,8 +144,13 @@ function ExportPanel({ authFetch, filters }) {
 // details drawer (the same details-drawer-overlay/.details-drawer pattern
 // the assessment-tool candidate view already uses in App.jsx) for the full
 // form answers and notes, instead of an inline-expanding row.
+// Matches the API's own default page size (routes/leads.js caps at 500).
+const PAGE_SIZE = 100;
+
 function Leads({ authFetch }) {
   const [leads, setLeads] = useState(null);
+  const [total, setTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [summary, setSummary] = useState(null);
   const [campaigns, setCampaigns] = useState([]);
   const [users, setUsers] = useState([]);
@@ -155,24 +160,45 @@ function Leads({ authFetch }) {
   const [savingId, setSavingId] = useState(null);
   const [error, setError] = useState(null);
 
-  const load = async () => {
+  // The KPI strip keeps its own numbers when only a row changed, so this
+  // is separate from load() rather than folded into it.
+  const loadSummary = async () => {
+    try {
+      const res = await authFetch(`${LEADS_API_BASE}/summary`);
+      const data = await res.json();
+      if (res.ok) setSummary(data);
+    } catch {
+      // non-fatal — the strip just keeps the numbers it already has
+    }
+  };
+
+  // offset 0 replaces the list (first load, or the filters changed);
+  // anything else appends the next page. Without an explicit limit the
+  // API caps at 100 and the rest of the table is simply unreachable.
+  const load = async (offset = 0) => {
     try {
       const params = new URLSearchParams();
       Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v); });
-      const [leadsRes, summaryRes] = await Promise.all([
-        authFetch(`${LEADS_API_BASE}?${params.toString()}`),
-        authFetch(`${LEADS_API_BASE}/summary`)
-      ]);
-      const leadsData = await leadsRes.json();
-      if (!leadsRes.ok) throw new Error(leadsData.error || 'Could not load leads.');
-      setLeads(leadsData.leads || []);
+      params.set('limit', String(PAGE_SIZE));
+      params.set('offset', String(offset));
 
-      const summaryData = await summaryRes.json();
-      if (summaryRes.ok) setSummary(summaryData);
+      const res = await authFetch(`${LEADS_API_BASE}?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not load leads.');
+
+      setLeads(prev => (offset === 0 ? (data.leads || []) : [...(prev || []), ...(data.leads || [])]));
+      setTotal(data.total || 0);
+      if (offset === 0) await loadSummary();
     } catch (err) {
       setError(err.message);
       setLeads([]);
     }
+  };
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    await load(leads ? leads.length : 0);
+    setLoadingMore(false);
   };
 
   useEffect(() => {
@@ -193,7 +219,7 @@ function Leads({ authFetch }) {
       if (!res.ok) throw new Error(data.error || 'Could not update this lead.');
       setLeads(prev => prev.map(l => (l.id === lead.id ? data.lead : l)));
       setSelectedLead(prev => (prev && prev.id === lead.id ? data.lead : prev));
-      if (body.status !== undefined) load(); // status moved — refresh the pipeline counts too
+      if (body.status !== undefined) loadSummary(); // status moved — refresh the pipeline counts, but keep the pages already loaded
     } catch (err) {
       setError(err.message);
     } finally {
@@ -278,7 +304,11 @@ function Leads({ authFetch }) {
             </select>
           </div>
           <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            {leads === null ? 'Loading…' : `${leads.length} lead${leads.length === 1 ? '' : 's'}`}
+            {leads === null
+              ? 'Loading…'
+              : leads.length < total
+                ? `Showing ${leads.length} of ${total} leads`
+                : `${total} lead${total === 1 ? '' : 's'}`}
           </div>
         </div>
 
@@ -357,6 +387,14 @@ function Leads({ authFetch }) {
             </tbody>
           </table>
         </div>
+
+        {leads !== null && leads.length < total && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem' }}>
+            <button className="btn btn-secondary btn-sm" onClick={loadMore} disabled={loadingMore}>
+              {loadingMore ? 'Loading…' : `Load ${Math.min(PAGE_SIZE, total - leads.length)} more`}
+            </button>
+          </div>
+        )}
       </div>
 
       {selectedLead && (
