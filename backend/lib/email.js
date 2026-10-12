@@ -22,7 +22,15 @@ function getTransport() {
       host: process.env.SMTP_HOST,
       port,
       secure: port === 465, // SMTP over implicit TLS; 587/25 use STARTTLS instead, which nodemailer negotiates automatically when secure is false
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      // Without these, a blocked/unreachable host (e.g. Office365 refusing
+      // Render's IP range) falls back to Node's raw TCP connect timeout —
+      // around 2 minutes — per attempt. leads/poller.js retries every
+      // pending send on every 5 min sweep, serially, so a dead host would
+      // otherwise stall each sweep for minutes instead of failing fast.
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000
     });
   }
   return cachedTransport;

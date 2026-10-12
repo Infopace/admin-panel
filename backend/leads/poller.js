@@ -24,6 +24,14 @@ const email = require('../lib/email');
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // leads are time-sensitive for sales follow-up — tighter than the 10 min mentions/inbox cadence
 let intervalHandle = null;
 
+// Guards against non-address junk ending up in the email field (e.g. a
+// test submission with placeholder text) — without this, sendMail's "No
+// recipients defined" rejection gets retried and logged every sweep
+// forever, since that failure never flips lead_ack_sent to true.
+function isValidEmail(value) {
+  return typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 function formatFieldData(fieldData) {
   return (fieldData || [])
     .map(f => `${f.name}: ${(f.values || []).join(', ')}`)
@@ -67,7 +75,7 @@ async function notifyNewLead(lead) {
 // collect an email (phone-only forms) or SMTP isn't configured — the
 // lead is already saved either way; only a genuine send failure throws.
 async function notifyLeadSubmitter(lead) {
-  if (!lead.email || !email.isConfigured()) return false;
+  if (!lead.email || !isValidEmail(lead.email) || !email.isConfigured()) return false;
 
   const firstName = (lead.full_name || '').trim().split(/\s+/)[0];
   const subject = `Thanks for your interest${firstName ? ', ' + firstName : ''}!`;
@@ -153,6 +161,55 @@ async function pollAccount(client, row) {
   }
 }
 
+// Leads whose internal/ack email failed last time (bad SMTP login,
+// transient network block, etc.) never come back through pollAccount —
+// its dedup is by leadgen_id already in the table, not by notify status.
+// Without this, a failure here is permanent until someone notices in
+// Supabase and manually calls POST /leads/notify-pending. This retries
+// both emails, independently, every sweep (5 min) until each succeeds —
+// same "try again next sweep" shape as the rest of this poller. A lead
+// with no captured email legitimately never gets lead_ack_sent = true;
+// that's cheap to keep re-checking at this volume.
+async function retryPendingNotifications(client) {
+  const { data: pending, error } = await client
+    .from('leads')
+    .select('*')
+    .or('internal_notify_sent.eq.false,lead_ack_sent.eq.false')
+    .order('created_time', { ascending: true })
+    .limit(200);
+  if (error) {
+    console.error('[leads/poller] Could not list leads pending notification:', error.message);
+    return;
+  }
+
+  for (const lead of pending || []) {
+    const update = {};
+
+    if (!lead.internal_notify_sent) {
+      try {
+        if (await notifyNewLead(lead)) {
+          update.internal_notify_sent = true;
+          update.notified_at = new Date().toISOString();
+        }
+      } catch (err) {
+        console.error(`[leads/poller] Retry: could not send internal notification for lead ${lead.id}:`, err.message);
+      }
+    }
+
+    if (!lead.lead_ack_sent) {
+      try {
+        if (await notifyLeadSubmitter(lead)) update.lead_ack_sent = true;
+      } catch (err) {
+        console.error(`[leads/poller] Retry: could not send acknowledgement email to lead ${lead.id} (${lead.email}):`, err.message);
+      }
+    }
+
+    if (Object.keys(update).length === 0) continue;
+    const { error: updateError } = await client.from('leads').update(update).eq('id', lead.id);
+    if (updateError) console.error(`[leads/poller] Could not record retried mail status for lead ${lead.id}:`, updateError.message);
+  }
+}
+
 async function sweep() {
   const client = getSocialClient();
   if (!client) return; // social project not configured — nothing to poll yet
@@ -170,6 +227,8 @@ async function sweep() {
   for (const row of accounts || []) {
     await pollAccount(client, row).catch(err => console.error(`[leads/poller] Unexpected failure polling account ${row.id}:`, err.message));
   }
+
+  await retryPendingNotifications(client).catch(err => console.error('[leads/poller] Retry pass failed:', err.message));
 }
 
 function start() {
