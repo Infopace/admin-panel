@@ -645,6 +645,22 @@ body {
   background-color: var(--bg-surface-hover);
 }
 
+/* Leads table — tighter padding + capped/ellipsised cell content so the
+   Campaign/Ad column (often a long internal campaign codename) can't grow
+   the table wider than the viewport and force horizontal scrolling. */
+.leads-table th,
+.leads-table td {
+  padding: 0.85rem 1rem;
+}
+
+.truncate-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  max-width: 100%;
+}
+
 .table-tool-cell {
   display: flex;
   align-items: center;

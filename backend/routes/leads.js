@@ -12,7 +12,7 @@ const ExcelJS = require('exceljs');
 const { getSocialClient } = require('../social/db');
 const { listUsers } = require('../lib/users');
 const { sendPendingDigest } = require('../leads/digest');
-const { notifyNewLead } = require('../leads/poller');
+const { notifyNewLead, notifyLeadSubmitter } = require('../leads/poller');
 
 const router = express.Router();
 
@@ -268,6 +268,53 @@ router.patch('/leads/:id', async (req, res) => {
   res.json({ lead: data });
 });
 
+// Manual, one-shot send of the "Thank You for Contacting Infopace" ack
+// email to this lead — for leads lead_ack_sent never flipped true for
+// (older leads from before this reply existed, or whose automatic retry
+// hasn't caught up yet).
+//
+// The claim step below is a compare-and-swap, not just a read-then-check:
+// .eq('lead_ack_sent', false) means the UPDATE only actually touches the
+// row (and only then returns it) if nobody has already claimed it. Two
+// near-simultaneous requests (double-click, two tabs) both running the
+// plain "read lead, check the flag, send, then write true" sequence could
+// both pass the check before either write lands, sending the email twice
+// — this update is atomic at the database level, so only one of the two
+// requests can ever win the claim and proceed to actually send.
+router.post('/leads/:id/send-reply', async (req, res) => {
+  const client = requireSocialClient(res);
+  if (!client) return;
+
+  const { data: lead, error: fetchError } = await client.from('leads').select('*').eq('id', req.params.id).single();
+  if (fetchError || !lead) return res.status(404).json({ error: 'Lead not found.' });
+
+  const { data: claimed, error: claimError } = await client
+    .from('leads')
+    .update({ lead_ack_sent: true })
+    .eq('id', lead.id)
+    .eq('lead_ack_sent', false)
+    .select()
+    .single();
+  if (claimError || !claimed) {
+    return res.status(409).json({ error: 'A reply has already been sent to this lead.' });
+  }
+
+  try {
+    const sent = await notifyLeadSubmitter(lead);
+    if (!sent) {
+      // Nothing was actually sent (no valid email / SMTP down) — release
+      // the claim so a later retry (manual or the poller's own sweep)
+      // isn't permanently blocked by a flag this request itself set.
+      await client.from('leads').update({ lead_ack_sent: false }).eq('id', lead.id);
+      return res.status(400).json({ error: 'Could not send — this lead has no valid email address, or SMTP is not configured.' });
+    }
+    res.json({ lead: claimed });
+  } catch (err) {
+    await client.from('leads').update({ lead_ack_sent: false }).eq('id', lead.id);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Reuses the same login-accounts roster as the Inbox's assignee dropdown
 // (routes/social.js's GET /social/team), narrowed to finance + admin —
 // the only roles that can open the Sales module, so assigning a lead to
@@ -360,6 +407,43 @@ router.post('/leads/test-notify', async (req, res) => {
       return res.status(500).json({ error: 'notifyNewLead() returned false — LEADS_NOTIFY_EMAIL or SMTP is not configured in this environment.' });
     }
     res.json({ sent: true, recipients: (process.env.LEADS_NOTIFY_EMAIL || '').split(',').map(s => s.trim()).filter(Boolean) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin-only: sends the real per-lead "Thanks for your interest" ack
+// email (the exact function the Meta Lead Ads poller calls after saving a
+// new lead) to a target address of the caller's choosing — so delivery to
+// an external inbox (Gmail/Yahoo/Outlook, not this tenant's own domain)
+// can be checked by hand, including whether it lands in spam. Nothing is
+// written to the leads table.
+router.post('/leads/test-ack', async (req, res) => {
+  const user = listUsers().find(u => u.id === req.user.id);
+  if (!user || user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin only.', code: 'FORBIDDEN_ROLE' });
+  }
+
+  const targetEmail = (req.body && req.body.email || '').trim();
+  if (!targetEmail) {
+    return res.status(400).json({ error: 'Pass { "email": "you@example.com" } in the request body.' });
+  }
+
+  const sampleLead = {
+    full_name: 'Test Lead',
+    email: targetEmail,
+    phone: '+910000000000',
+    form_name: 'Test Form (not a real submission)',
+    campaign_name: 'Manual admin test',
+    created_time: new Date().toISOString()
+  };
+
+  try {
+    const sent = await notifyLeadSubmitter(sampleLead);
+    if (!sent) {
+      return res.status(500).json({ error: 'notifyLeadSubmitter() returned false — check that the email address is valid and SMTP is configured in this environment.' });
+    }
+    res.json({ sent: true, to: targetEmail });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

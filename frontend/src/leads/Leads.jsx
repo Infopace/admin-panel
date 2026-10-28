@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { RefreshCw, X, Target, Mail, Phone, Megaphone, Calendar, Download } from 'lucide-react';
+import { RefreshCw, X, Target, Mail, Phone, Megaphone, Calendar, Download, Send, CheckCircle2 } from 'lucide-react';
 import { LEADS_API_BASE, STATUS_OPTIONS, STATUS_COLOR } from './api';
 
 function isoDate(d) {
@@ -158,6 +158,7 @@ function Leads({ authFetch }) {
   const [selectedLead, setSelectedLead] = useState(null);
   const [notesDraft, setNotesDraft] = useState('');
   const [savingId, setSavingId] = useState(null);
+  const [sendingReplyId, setSendingReplyId] = useState(null);
   const [error, setError] = useState(null);
 
   // The KPI strip keeps its own numbers when only a row changed, so this
@@ -224,6 +225,24 @@ function Leads({ authFetch }) {
       setError(err.message);
     } finally {
       setSavingId(null);
+    }
+  };
+
+  // One-shot by design: the backend (POST /leads/:id/send-reply) refuses a
+  // second send once lead_ack_sent is true, and the button itself only
+  // renders while it's still false — so there's no "send again" path here.
+  const sendReply = async (lead) => {
+    setSendingReplyId(lead.id);
+    try {
+      const res = await authFetch(`${LEADS_API_BASE}/${lead.id}/send-reply`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not send the reply email.');
+      setLeads(prev => prev.map(l => (l.id === lead.id ? data.lead : l)));
+      setSelectedLead(prev => (prev && prev.id === lead.id ? data.lead : prev));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSendingReplyId(null);
     }
   };
 
@@ -313,7 +332,7 @@ function Leads({ authFetch }) {
         </div>
 
         <div className="table-container">
-          <table className="custom-table">
+          <table className="custom-table leads-table">
             <thead>
               <tr>
                 <th>Captured</th>
@@ -321,7 +340,7 @@ function Leads({ authFetch }) {
                 <th>Campaign / Ad</th>
                 <th>Status</th>
                 <th>Assignee</th>
-                <th></th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -336,23 +355,25 @@ function Leads({ authFetch }) {
                       {lead.created_time ? formatIST(lead.created_time, { year: 'numeric', month: 'numeric', day: 'numeric' }) : '—'}<br />
                       {lead.created_time ? formatIST(lead.created_time, { hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: true }) : ''}
                     </td>
-                    <td style={{ minWidth: 220 }}>
-                      <div style={{ fontWeight: 600 }}>{lead.full_name || 'Unnamed lead'}</div>
+                    <td style={{ maxWidth: 170 }}>
+                      <div className="truncate-line" style={{ fontWeight: 600 }} title={lead.full_name || ''}>{lead.full_name || 'Unnamed lead'}</div>
                       {lead.email && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                          <Mail size={12} /> {lead.email}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem', color: 'var(--text-secondary)', minWidth: 0 }} title={lead.email}>
+                          <Mail size={12} style={{ flexShrink: 0 }} /> <span className="truncate-line" style={{ minWidth: 0, flex: 1 }}>{lead.email}</span>
                         </div>
                       )}
                       {lead.phone && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                          <Phone size={12} /> {lead.phone}
+                          <Phone size={12} style={{ flexShrink: 0 }} /> {lead.phone}
                         </div>
                       )}
                     </td>
-                    <td style={{ minWidth: 200, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}><Megaphone size={12} /> {lead.campaign_name || '—'}</div>
-                      {lead.ad_name && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{lead.ad_name}</div>}
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{lead.form_name}</div>
+                    <td style={{ maxWidth: 170, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', minWidth: 0 }} title={lead.campaign_name || ''}>
+                        <Megaphone size={12} style={{ flexShrink: 0 }} /> <span className="truncate-line" style={{ minWidth: 0, flex: 1 }}>{lead.campaign_name || '—'}</span>
+                      </div>
+                      {lead.ad_name && <div className="truncate-line" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }} title={lead.ad_name}>{lead.ad_name}</div>}
+                      <div className="truncate-line" style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }} title={lead.form_name || ''}>{lead.form_name}</div>
                     </td>
                     <td onClick={stop}>
                       <select
@@ -365,9 +386,10 @@ function Leads({ authFetch }) {
                         {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
                     </td>
-                    <td onClick={stop}>
+                    <td onClick={stop} style={{ maxWidth: 130 }}>
                       <select
                         className="tool-select"
+                        style={{ maxWidth: 130 }}
                         value={lead.assigned_to || ''}
                         disabled={savingId === lead.id}
                         onChange={(e) => patch(lead, { assignedTo: e.target.value })}
@@ -377,9 +399,25 @@ function Leads({ authFetch }) {
                       </select>
                     </td>
                     <td onClick={stop}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => openDrawer(lead)}>
-                        <Target size={14} /> Details
-                      </button>
+                      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                        {lead.lead_ack_sent ? (
+                          <span className="btn btn-secondary btn-sm" style={{ color: 'var(--accent-success)', cursor: 'default' }} title="The auto-reply email has already been sent to this lead.">
+                            <CheckCircle2 size={14} /> Sent
+                          </span>
+                        ) : (
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            disabled={sendingReplyId === lead.id || !lead.email}
+                            title={lead.email ? 'Send the "Thank You for Contacting Infopace" email to this lead (one-time)' : 'This lead has no email address'}
+                            onClick={() => sendReply(lead)}
+                          >
+                            <Send size={14} /> {sendingReplyId === lead.id ? 'Sending…' : 'Send Reply'}
+                          </button>
+                        )}
+                        <button className="btn btn-secondary btn-sm" onClick={() => openDrawer(lead)}>
+                          <Target size={14} /> Details
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -422,6 +460,21 @@ function Leads({ authFetch }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.88rem' }}>
                     <Phone size={14} style={{ color: 'var(--text-muted)' }} /> {selectedLead.phone}
                   </div>
+                )}
+                {selectedLead.lead_ack_sent ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', color: 'var(--accent-success)' }}>
+                    <CheckCircle2 size={14} /> Auto-reply already sent to this lead.
+                  </div>
+                ) : (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    style={{ alignSelf: 'flex-start' }}
+                    disabled={sendingReplyId === selectedLead.id || !selectedLead.email}
+                    title={selectedLead.email ? 'Send the "Thank You for Contacting Infopace" email to this lead (one-time)' : 'This lead has no email address'}
+                    onClick={() => sendReply(selectedLead)}
+                  >
+                    <Send size={14} /> {sendingReplyId === selectedLead.id ? 'Sending…' : 'Send Reply Email'}
+                  </button>
                 )}
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.88rem' }}>
                   <Megaphone size={14} style={{ color: 'var(--text-muted)', marginTop: 2 }} />

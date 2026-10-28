@@ -38,6 +38,19 @@ function formatFieldData(fieldData) {
     .join('\n');
 }
 
+// A bare generic-text email with no sender identity/footer is exactly the
+// shape spam filters flag, especially across many different external
+// recipient domains (Gmail/Yahoo/Outlook) rather than one internal tenant.
+// Pulls the display name/domain straight out of EMAIL_FROM so there's no
+// separate "company name" env var to keep in sync.
+function getSenderIdentity() {
+  const raw = process.env.EMAIL_FROM || process.env.SMTP_USER || '';
+  const match = raw.match(/^(.*?)<(.+@(.+))>$/);
+  if (match) return { name: match[1].trim() || 'Infopace', domain: match[3].trim() };
+  const domain = raw.includes('@') ? raw.split('@')[1] : 'infopaceindia.com';
+  return { name: 'Infopace', domain };
+}
+
 // Returns true only once email.sendMail() has actually confirmed the
 // send; false when there was simply nothing to send to (no recipients
 // configured, SMTP not set up) — never thrown as an error since that
@@ -77,21 +90,43 @@ async function notifyNewLead(lead) {
 async function notifyLeadSubmitter(lead) {
   if (!lead.email || !isValidEmail(lead.email) || !email.isConfigured()) return false;
 
+  const { name: senderName, domain } = getSenderIdentity();
   const firstName = (lead.full_name || '').trim().split(/\s+/)[0];
-  const subject = `Thanks for your interest${firstName ? ', ' + firstName : ''}!`;
+  const subject = `Thank You for Contacting ${senderName}`;
+
   const text = [
-    `Hi ${lead.full_name || 'there'},`,
+    `Dear ${firstName || lead.full_name || 'there'},`,
     '',
-    `Thanks for reaching out through ${lead.campaign_name || lead.form_name || 'our form'} — we've received your details and our team will be in touch with you shortly.`,
+    `Thank you for reaching out to ${senderName}. We have received your details, and a member of our team will contact you shortly to discuss your requirements further.`,
     '',
-    'If anything is urgent, just reply to this email.',
-    '',
-    'Best regards,',
-    'Team Infopace'
+    'Warm regards,',
+    `Team ${senderName}`,
+    `https://${domain}`
   ].join('\n');
 
-  await email.sendMail({ to: lead.email, subject, text });
+  // A real footer (name, domain, physical-looking signature) instead of
+  // a bare two-line message — reduces the chance Gmail/Yahoo/Outlook spam
+  // filters flag this as generic bulk mail, since it's going to many
+  // different external domains rather than one internal tenant.
+  // Deliberately doesn't name the campaign/form (lead.campaign_name /
+  // lead.form_name) — those are internal ad-ops labels (e.g. versioned
+  // campaign codenames), not something a customer should see quoted back
+  // to them.
+  const html = [
+    `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;line-height:1.5;max-width:520px;">`,
+    `<p>Dear ${escapeHtml(firstName || lead.full_name || 'there')},</p>`,
+    `<p>Thank you for reaching out to <strong>${escapeHtml(senderName)}</strong>. We have received your details, and a member of our team will contact you shortly to discuss your requirements further.</p>`,
+    `<p style="margin-top:24px;">Warm regards,<br/>Team ${escapeHtml(senderName)}<br/>`,
+    `<a href="https://${domain}" style="color:#0b5fff;">${domain}</a></p>`,
+    `</div>`
+  ].join('');
+
+  await email.sendMail({ to: lead.email, subject, text, html, replyTo: process.env.EMAIL_FROM || process.env.SMTP_USER });
   return true;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 async function pollAccount(client, row) {
@@ -243,4 +278,4 @@ function stop() {
   intervalHandle = null;
 }
 
-module.exports = { start, stop, sweep, notifyNewLead };
+module.exports = { start, stop, sweep, notifyNewLead, notifyLeadSubmitter };

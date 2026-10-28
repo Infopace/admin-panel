@@ -36,10 +36,10 @@ function getTransport() {
   return cachedTransport;
 }
 
-async function sendMail({ to, subject, html, text }) {
+async function sendMail({ to, subject, html, text, replyTo }) {
   const transport = getTransport();
   if (!transport) throw new Error('SMTP_HOST / SMTP_USER / SMTP_PASS are not set in backend/.env.');
-  await transport.sendMail({ from: process.env.EMAIL_FROM || process.env.SMTP_USER, to, subject, html, text });
+  await transport.sendMail({ from: process.env.EMAIL_FROM || process.env.SMTP_USER, to, subject, html, text, replyTo });
 }
 
 module.exports = { isConfigured, sendMail };
